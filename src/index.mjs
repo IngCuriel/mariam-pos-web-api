@@ -15,8 +15,10 @@ app.use(express.json());
 
 // Rutas 
 import salesRouter from "./routes/sales.js";
+import productsRouter from "./routes/products.js";
  
-app.use("/api/sales", salesRouter); 
+app.use("/api/sales", salesRouter);
+app.use("/api/products", productsRouter); 
 // -------------------
 // Iniciar servidor
 // -------------------
