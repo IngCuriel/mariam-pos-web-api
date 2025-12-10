@@ -51,8 +51,7 @@ export const createProductsBulk = async (req, res) => {
                 name: category.name,
                 description: category.description,
                 showInPOS: category.showInPOS || false,
-                branchId: branchId,
-                branchName: branchName
+                branchId: branchId
               }
             });
             finalCategoryId = newCategory.id;
@@ -64,8 +63,7 @@ export const createProductsBulk = async (req, res) => {
                 name: category.name,
                 description: category.description,
                 showInPOS: category.showInPOS || false,
-                branchId: branchId,
-                branchName: branchName
+                branchId: branchId
               }
             });
             finalCategoryId = existingCategory.id;
@@ -120,7 +118,6 @@ export const createProductsBulk = async (req, res) => {
               trackInventory: trackInventory || false,
               isKit: isKit || false,
               branchId: branchId,
-              branchName: branchName,
               createdAt: createdAt ? new Date(createdAt) : new Date()
             }
           });
@@ -155,8 +152,7 @@ export const createProductsBulk = async (req, res) => {
                   quantity: pres.quantity,
                   unitPrice: pres.unitPrice,
                   isDefault: pres.isDefault || false,
-                  branchId: presBranchObj.id,
-                  branchName: presBranchObj.name
+                  branchId: presBranchObj.id
                 },
                 create: {
                   id: pres.id,
@@ -165,8 +161,7 @@ export const createProductsBulk = async (req, res) => {
                   unitPrice: pres.unitPrice,
                   isDefault: pres.isDefault || false,
                   productId: product.id,
-                  branchId: presBranchObj.id,
-                  branchName: presBranchObj.name
+                  branchId: presBranchObj.id
                 }
               });
             } else {
@@ -178,8 +173,7 @@ export const createProductsBulk = async (req, res) => {
                   unitPrice: pres.unitPrice,
                   isDefault: pres.isDefault || false,
                   productId: product.id,
-                  branchId: presBranchObj.id,
-                  branchName: presBranchObj.name
+                  branchId: presBranchObj.id
                 }
               });
             }
@@ -199,8 +193,7 @@ export const createProductsBulk = async (req, res) => {
               minStock: inventory.minStock || 0,
               maxStock: inventory.maxStock,
               trackInventory: inventory.trackInventory || false,
-              branchId: invBranchObj.id,
-              branchName: invBranchObj.name
+              branchId: invBranchObj.id
             },
             create: {
               productId: product.id,
@@ -208,8 +201,7 @@ export const createProductsBulk = async (req, res) => {
               minStock: inventory.minStock || 0,
               maxStock: inventory.maxStock,
               trackInventory: inventory.trackInventory || false,
-              branchId: invBranchObj.id,
-              branchName: invBranchObj.name
+              branchId: invBranchObj.id
             }
           });
         }
@@ -240,8 +232,17 @@ export const createProductsBulk = async (req, res) => {
           where: { id: product.id },
           include: {
             category: true,
-            presentations: true,
-            inventory: true,
+            branch: true,
+            presentations: {
+              include: {
+                branch: true
+              }
+            },
+            inventory: {
+              include: {
+                branch: true
+              }
+            },
             kitItems: {
               include: {
                 product: true,
@@ -251,7 +252,21 @@ export const createProductsBulk = async (req, res) => {
           }
         });
 
-        createdProducts.push(fullProduct);
+        // Mapear para incluir branch.name como branch para compatibilidad
+        const productWithBranch = {
+          ...fullProduct,
+          branch: fullProduct.branch?.name || null,
+          presentations: fullProduct.presentations?.map(p => ({
+            ...p,
+            branch: p.branch?.name || null
+          })) || [],
+          inventory: fullProduct.inventory ? {
+            ...fullProduct.inventory,
+            branch: fullProduct.inventory.branch?.name || null
+          } : null
+        };
+
+        createdProducts.push(productWithBranch);
       }
 
       return createdProducts;
@@ -349,12 +364,18 @@ export const getProductsByBranch = async (req, res) => {
     };
 
     const products = await prisma.product.findMany({
-      where: { branch: branch },
+      where: { branchId: branchObj.id },
       include,
       orderBy: { createdAt: 'desc' }
     });
 
-    res.json(products);
+    // Mapear productos para incluir branch.name como branch para compatibilidad con frontend
+    const productsWithBranch = products.map(product => ({
+      ...product,
+      branch: product.branch?.name || null
+    }));
+
+    res.json(productsWithBranch);
   } catch (error) {
     console.error('Error obteniendo productos por sucursal:', error);
     res.status(500).json({ error: 'Error obteniendo productos por sucursal' });
@@ -390,7 +411,13 @@ export const getCategoriesByBranch = async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    res.json(categories);
+    // Mapear categorías para incluir branch.name como branch para compatibilidad con frontend
+    const categoriesWithBranch = categories.map(category => ({
+      ...category,
+      branch: category.branch?.name || null
+    }));
+
+    res.json(categoriesWithBranch);
   } catch (error) {
     console.error('Error obteniendo categorías por sucursal:', error);
     res.status(500).json({ error: 'Error obteniendo categorías por sucursal' });
@@ -453,11 +480,20 @@ export const getAllProducts = async (req, res) => {
 export const getAllCategories = async (req, res) => {
   try {
     const categories = await prisma.category.findMany({
+      include: {
+        branch: true
+      },
       distinct: ['name'],
       orderBy: { name: 'asc' }
     });
 
-    res.json(categories);
+    // Mapear categorías para incluir branch.name como branch para compatibilidad con frontend
+    const categoriesWithBranch = categories.map(category => ({
+      ...category,
+      branch: category.branch?.name || null
+    }));
+
+    res.json(categoriesWithBranch);
   } catch (error) {
     console.error('Error obteniendo todas las categorías:', error);
     res.status(500).json({ error: 'Error obteniendo categorías' });

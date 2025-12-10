@@ -46,8 +46,7 @@ export const getSales = async (req, res) => {
           s.folio,
           s.total,
           s.status,
-          s."branchName" as branch,
-          b.name as branch_name,
+          COALESCE(b.name, 'Sin sucursal') as branch,
           s."cashRegister",
           s."paymentMethod",
           s."createdAt",
@@ -119,7 +118,6 @@ export const createSale = async (req, res) => {
         folio,
         total,
         branchId: branchObj.id,
-        branchName: branchObj.name,
         cashRegister,
         status,
         paymentMethod,
@@ -127,7 +125,14 @@ export const createSale = async (req, res) => {
       },
       include: { details: true, branch: true },
     });
-    res.json(sale);
+    
+    // Mapear para incluir branch.name como branch para compatibilidad con frontend
+    const saleWithBranch = {
+      ...sale,
+      branch: sale.branch?.name || null
+    };
+    
+    res.json(saleWithBranch);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error creando venta' });
@@ -139,10 +144,18 @@ export const getSalesById = async (req, res) => {
   const sale = await prisma.sale.findUnique({
     where: { id: parseInt(id) },
     include: {
-       details: true
+       details: true,
+       branch: true
     },
   });
-  res.json(sale);
+  
+  // Mapear para incluir branch.name como branch para compatibilidad con frontend
+  const saleWithBranch = {
+    ...sale,
+    branch: sale?.branch?.name || null
+  };
+  
+  res.json(saleWithBranch);
 };
 
 
@@ -171,7 +184,6 @@ export const createSalesWithDetails = async (req, res) => {
           data: {
             folio :'TK '+id,
             branchId: branchObj.id,
-            branchName: branchObj.name,
             cashRegister,
             total,
             status,
@@ -190,6 +202,15 @@ export const createSalesWithDetails = async (req, res) => {
             },
           },
           include: { details: true, branch: true },
+        });
+
+        // Mapear para incluir branch.name como branch para compatibilidad
+        const saleWithBranch = {
+          ...createdSale,
+          branch: createdSale.branch?.name || null
+        };
+
+        createdSales.push(saleWithBranch);
         });
 
         createdSales.push(createdSale);
@@ -262,7 +283,7 @@ export const getSalesStats = async (req, res) => {
       // Ventas por sucursal
       prisma.$queryRawUnsafe(
         `SELECT 
-          COALESCE(s."branchName", b.name, 'Sin sucursal') as branch,
+          COALESCE(b.name, 'Sin sucursal') as branch,
           COUNT(*) as count,
           COALESCE(SUM(s.total), 0) as total
         FROM "Sale" s

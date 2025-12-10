@@ -44,7 +44,6 @@ model Sale {
   //Sucursal
   branchId      Int?
   branch        Branch?       @relation(fields: [branchId], references: [id])
-  branchName    String?       // Mantener para compatibilidad durante migración
   //Caja de cobro
   cashRegister  String?   @default("Caja 1") 
   paymentMethod String?
@@ -54,7 +53,6 @@ model Sale {
   details       SaleDetail[]
 
   @@index([branchId])
-  @@index([branchName])
 }
 
 model SaleDetail {
@@ -79,13 +77,11 @@ model Category {
   showInPOS   Boolean  @default(false)
   branchId    Int?
   branch      Branch?  @relation(fields: [branchId], references: [id])
-  branchName  String?  // Mantener para compatibilidad durante migración
   createdAt   DateTime @default(now())
 
   products    Product[]
 
   @@index([branchId])
-  @@index([branchName])
   @@index([name])
 }
 
@@ -103,7 +99,6 @@ model Product {
   isKit         Boolean  @default(false)
   branchId      Int?
   branch        Branch?  @relation(fields: [branchId], references: [id])
-  branchName    String?  // Mantener para compatibilidad durante migración
   createdAt     DateTime @default(now())
 
   categoryId    String
@@ -117,7 +112,6 @@ model Product {
   @@index([code])
   @@index([name])
   @@index([branchId])
-  @@index([branchName])
   @@index([categoryId])
 }
 
@@ -129,7 +123,6 @@ model ProductPresentation {
   isDefault Boolean @default(false)
   branchId  Int?
   branch    Branch? @relation(fields: [branchId], references: [id])
-  branchName String? // Mantener para compatibilidad durante migración
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -140,7 +133,6 @@ model ProductPresentation {
 
   @@index([productId])
   @@index([branchId])
-  @@index([branchName])
 }
 
 model Inventory {
@@ -153,13 +145,11 @@ model Inventory {
   trackInventory Boolean @default(false)
   branchId      Int?
   branch        Branch?  @relation(fields: [branchId], references: [id])
-  branchName    String?  // Mantener para compatibilidad durante migración
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([productId])
   @@index([branchId])
-  @@index([branchName])
 }
 
 model KitItem {
