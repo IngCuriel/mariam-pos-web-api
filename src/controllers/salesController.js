@@ -211,9 +211,6 @@ export const createSalesWithDetails = async (req, res) => {
         };
 
         createdSales.push(saleWithBranch);
-        });
-
-        createdSales.push(createdSale);
       }
 
       return createdSales;
