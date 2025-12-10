@@ -99,7 +99,6 @@ export const createProductsBulk = async (req, res) => {
               trackInventory: trackInventory || false,
               isKit: isKit || false,
               branchId: branchId,
-              branchName: branchName
             }
           });
         } else {
@@ -314,7 +313,6 @@ export const createCategoriesBulk = async (req, res) => {
             description,
             showInPOS: showInPOS || false,
             branchId: branchObj.id,
-            branchName: branchObj.name
           },
           create: {
             id: id,
@@ -322,7 +320,6 @@ export const createCategoriesBulk = async (req, res) => {
             description,
             showInPOS: showInPOS || false,
             branchId: branchObj.id,
-            branchName: branchObj.name
           }
         });
 

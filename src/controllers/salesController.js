@@ -286,7 +286,7 @@ export const getSalesStats = async (req, res) => {
         FROM "Sale" s
         LEFT JOIN "Branch" b ON s."branchId" = b.id
         ${whereClause}
-        GROUP BY COALESCE(s."branchName", b.name, 'Sin sucursal')`
+        GROUP BY COALESCE(b.name, 'Sin sucursal')`
       ),
       
       // Ventas por método de pago
