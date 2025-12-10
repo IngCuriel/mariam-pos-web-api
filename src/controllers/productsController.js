@@ -364,3 +364,84 @@ export const getCategoriesByBranch = async (req, res) => {
   }
 };
 
+// Obtener todos los productos de todas las sucursales (para tienda en línea)
+export const getAllProducts = async (req, res) => {
+  try {
+    const { includeInventory, includePresentations, search, categoryId, branch } = req.query;
+
+    const where = {};
+    
+    // Filtro por búsqueda (nombre o descripción)
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+    
+    // Filtro por categoría
+    if (categoryId) {
+      where.categoryId = categoryId;
+    }
+    
+    // Filtro por sucursal
+    if (branch) {
+      where.branch = branch;
+    }
+
+    const include = {
+      category: true,
+      ...(includePresentations === 'true' && { presentations: true }),
+      ...(includeInventory === 'true' && { inventory: true })
+    };
+
+    const products = await prisma.product.findMany({
+      where,
+      include,
+      orderBy: { name: 'asc' }
+    });
+
+    res.json(products);
+  } catch (error) {
+    console.error('Error obteniendo todos los productos:', error);
+    res.status(500).json({ error: 'Error obteniendo productos' });
+  }
+};
+
+// Obtener todas las categorías de todas las sucursales
+export const getAllCategories = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      distinct: ['name'],
+      orderBy: { name: 'asc' }
+    });
+
+    res.json(categories);
+  } catch (error) {
+    console.error('Error obteniendo todas las categorías:', error);
+    res.status(500).json({ error: 'Error obteniendo categorías' });
+  }
+};
+
+// Obtener todas las sucursales únicas
+export const getAllBranches = async (req, res) => {
+  try {
+    const branches = await prisma.product.findMany({
+      select: {
+        branch: true
+      },
+      distinct: ['branch']
+    });
+
+    const branchList = branches
+      .map(b => b.branch)
+      .filter(b => b !== null && b !== undefined)
+      .sort();
+
+    res.json(branchList);
+  } catch (error) {
+    console.error('Error obteniendo sucursales:', error);
+    res.status(500).json({ error: 'Error obteniendo sucursales' });
+  }
+};
+
