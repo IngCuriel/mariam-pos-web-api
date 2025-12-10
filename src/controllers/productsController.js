@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { getOrCreateBranch } from '../services/branchService.js';
 const prisma = new PrismaClient();
 
 // Crear productos en bulk (con categorías, presentaciones e inventario)
@@ -50,7 +51,8 @@ export const createProductsBulk = async (req, res) => {
                 name: category.name,
                 description: category.description,
                 showInPOS: category.showInPOS || false,
-                branch: branch || "Sucursal Default"
+                branchId: branchId,
+                branchName: branchName
               }
             });
             finalCategoryId = newCategory.id;
@@ -62,7 +64,8 @@ export const createProductsBulk = async (req, res) => {
                 name: category.name,
                 description: category.description,
                 showInPOS: category.showInPOS || false,
-                branch: branch || existingCategory.branch || "Sucursal Default"
+                branchId: branchId,
+                branchName: branchName
               }
             });
             finalCategoryId = existingCategory.id;
@@ -76,7 +79,7 @@ export const createProductsBulk = async (req, res) => {
           ? await tx.product.findFirst({
               where: {
                 code: code,
-                branch: branch || "Sucursal Default"
+                branchId: branchId
               }
             })
           : null;
@@ -97,7 +100,8 @@ export const createProductsBulk = async (req, res) => {
               categoryId: finalCategoryId,
               trackInventory: trackInventory || false,
               isKit: isKit || false,
-              branch: branch || "Sucursal Default"
+              branchId: branchId,
+              branchName: branchName
             }
           });
         } else {
@@ -115,7 +119,8 @@ export const createProductsBulk = async (req, res) => {
               categoryId: finalCategoryId,
               trackInventory: trackInventory || false,
               isKit: isKit || false,
-              branch: branch || "Sucursal Default",
+              branchId: branchId,
+              branchName: branchName,
               createdAt: createdAt ? new Date(createdAt) : new Date()
             }
           });
@@ -137,6 +142,10 @@ export const createProductsBulk = async (req, res) => {
 
           // Crear o actualizar presentaciones
           for (const pres of presentations) {
+            // Obtener sucursal de la presentación o usar la del producto
+            const presBranchName = pres.branch || branch || "Sucursal Default";
+            const presBranchObj = await getOrCreateBranch(presBranchName);
+            
             if (pres.id) {
               // Actualizar presentación existente
               await tx.productPresentation.upsert({
@@ -146,7 +155,8 @@ export const createProductsBulk = async (req, res) => {
                   quantity: pres.quantity,
                   unitPrice: pres.unitPrice,
                   isDefault: pres.isDefault || false,
-                  branch: pres.branch || branch || "Sucursal Default"
+                  branchId: presBranchObj.id,
+                  branchName: presBranchObj.name
                 },
                 create: {
                   id: pres.id,
@@ -155,7 +165,8 @@ export const createProductsBulk = async (req, res) => {
                   unitPrice: pres.unitPrice,
                   isDefault: pres.isDefault || false,
                   productId: product.id,
-                  branch: pres.branch || branch || "Sucursal Default"
+                  branchId: presBranchObj.id,
+                  branchName: presBranchObj.name
                 }
               });
             } else {
@@ -167,7 +178,8 @@ export const createProductsBulk = async (req, res) => {
                   unitPrice: pres.unitPrice,
                   isDefault: pres.isDefault || false,
                   productId: product.id,
-                  branch: pres.branch || branch || "Sucursal Default"
+                  branchId: presBranchObj.id,
+                  branchName: presBranchObj.name
                 }
               });
             }
@@ -176,6 +188,10 @@ export const createProductsBulk = async (req, res) => {
 
         // 4. Manejar inventario
         if (inventory) {
+          // Obtener sucursal del inventario o usar la del producto
+          const invBranchName = inventory.branch || branch || "Sucursal Default";
+          const invBranchObj = await getOrCreateBranch(invBranchName);
+          
           await tx.inventory.upsert({
             where: { productId: product.id },
             update: {
@@ -183,7 +199,8 @@ export const createProductsBulk = async (req, res) => {
               minStock: inventory.minStock || 0,
               maxStock: inventory.maxStock,
               trackInventory: inventory.trackInventory || false,
-              branch: inventory.branch || branch || "Sucursal Default"
+              branchId: invBranchObj.id,
+              branchName: invBranchObj.name
             },
             create: {
               productId: product.id,
@@ -191,7 +208,8 @@ export const createProductsBulk = async (req, res) => {
               minStock: inventory.minStock || 0,
               maxStock: inventory.maxStock,
               trackInventory: inventory.trackInventory || false,
-              branch: inventory.branch || branch || "Sucursal Default"
+              branchId: invBranchObj.id,
+              branchName: invBranchObj.name
             }
           });
         }
@@ -271,20 +289,25 @@ export const createCategoriesBulk = async (req, res) => {
           branch
         } = categoryData;
 
+        // Obtener o crear sucursal
+        const branchObj = await getOrCreateBranch(branch || "Sucursal Default");
+
         const category = await tx.category.upsert({
           where: { id: id },
           update: {
             name,
             description,
             showInPOS: showInPOS || false,
-            branch: branch || "Sucursal Default"
+            branchId: branchObj.id,
+            branchName: branchObj.name
           },
           create: {
             id: id,
             name,
             description,
             showInPOS: showInPOS || false,
-            branch: branch || "Sucursal Default"
+            branchId: branchObj.id,
+            branchName: branchObj.name
           }
         });
 
@@ -343,9 +366,19 @@ export const getCategoriesByBranch = async (req, res) => {
   try {
     const { branch } = req.params;
 
+    // Buscar sucursal por nombre
+    const branchObj = await prisma.branch.findUnique({
+      where: { name: branch }
+    });
+
+    if (!branchObj) {
+      return res.status(404).json({ error: 'Sucursal no encontrada' });
+    }
+
     const categories = await prisma.category.findMany({
-      where: { branch: branch },
+      where: { branchId: branchObj.id },
       include: {
+        branch: true,
         products: {
           select: {
             id: true,
@@ -386,7 +419,15 @@ export const getAllProducts = async (req, res) => {
     
     // Filtro por sucursal
     if (branch) {
-      where.branch = branch;
+      const branchObj = await prisma.branch.findUnique({
+        where: { name: branch }
+      });
+      if (branchObj) {
+        where.branchId = branchObj.id;
+      } else {
+        // Si no existe la sucursal, no retornar productos
+        return res.json([]);
+      }
     }
 
     const include = {
@@ -423,20 +464,14 @@ export const getAllCategories = async (req, res) => {
   }
 };
 
-// Obtener todas las sucursales únicas
+// Obtener todas las sucursales únicas desde la tabla Branch
 export const getAllBranches = async (req, res) => {
   try {
-    const branches = await prisma.product.findMany({
-      select: {
-        branch: true
-      },
-      distinct: ['branch']
-    });
+    const { getAllBranches: getAllBranchesService } = await import('../services/branchService.js');
+    const branches = await getAllBranchesService();
 
-    const branchList = branches
-      .map(b => b.branch)
-      .filter(b => b !== null && b !== undefined)
-      .sort();
+    // Retornar solo los nombres para compatibilidad con el frontend
+    const branchList = branches.map(b => b.name).sort();
 
     res.json(branchList);
   } catch (error) {

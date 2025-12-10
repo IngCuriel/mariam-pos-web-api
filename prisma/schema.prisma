@@ -13,13 +13,38 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============================================================
+// 🏢 MÓDULO DE SUCURSALES
+// ============================================================
+
+model Branch {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relaciones
+  sales       Sale[]
+  products    Product[]
+  categories  Category[]
+  presentations ProductPresentation[]
+  inventories Inventory[]
+
+  @@index([name])
+  @@index([isActive])
+}
+
 model Sale {
   id            Int           @id @default(autoincrement())
   folio         String?
   total         Float
   status        String?
   //Sucursal
-  branch        String?  @default("Sucursal Defult") 
+  branchId      Int?
+  branch        Branch?       @relation(fields: [branchId], references: [id])
+  branchName    String?       // Mantener para compatibilidad durante migración
   //Caja de cobro
   cashRegister  String?   @default("Caja 1") 
   paymentMethod String?
@@ -27,6 +52,9 @@ model Sale {
   clientName    String?
   syncStatus    String        @default("pendiente")
   details       SaleDetail[]
+
+  @@index([branchId])
+  @@index([branchName])
 }
 
 model SaleDetail {
@@ -49,12 +77,15 @@ model Category {
   name        String
   description String?
   showInPOS   Boolean  @default(false)
-  branch      String?  @default("Sucursal Default")
+  branchId    Int?
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  branchName  String?  // Mantener para compatibilidad durante migración
   createdAt   DateTime @default(now())
 
   products    Product[]
 
-  @@index([branch])
+  @@index([branchId])
+  @@index([branchName])
   @@index([name])
 }
 
@@ -70,7 +101,9 @@ model Product {
   icon          String?
   trackInventory Boolean? @default(false)
   isKit         Boolean  @default(false)
-  branch        String?  @default("Sucursal Default")
+  branchId      Int?
+  branch        Branch?  @relation(fields: [branchId], references: [id])
+  branchName    String?  // Mantener para compatibilidad durante migración
   createdAt     DateTime @default(now())
 
   categoryId    String
@@ -83,7 +116,8 @@ model Product {
 
   @@index([code])
   @@index([name])
-  @@index([branch])
+  @@index([branchId])
+  @@index([branchName])
   @@index([categoryId])
 }
 
@@ -93,7 +127,9 @@ model ProductPresentation {
   quantity  Int
   unitPrice Float
   isDefault Boolean @default(false)
-  branch    String?
+  branchId  Int?
+  branch    Branch? @relation(fields: [branchId], references: [id])
+  branchName String? // Mantener para compatibilidad durante migración
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -103,7 +139,8 @@ model ProductPresentation {
   kitItems  KitItem[]
 
   @@index([productId])
-  @@index([branch])
+  @@index([branchId])
+  @@index([branchName])
 }
 
 model Inventory {
@@ -114,12 +151,15 @@ model Inventory {
   minStock      Int      @default(0)
   maxStock      Int?
   trackInventory Boolean @default(false)
-  branch        String?
+  branchId      Int?
+  branch        Branch?  @relation(fields: [branchId], references: [id])
+  branchName    String?  // Mantener para compatibilidad durante migración
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([productId])
-  @@index([branch])
+  @@index([branchId])
+  @@index([branchName])
 }
 
 model KitItem {

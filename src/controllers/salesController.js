@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { getOrCreateBranch } from '../services/branchService.js';
 const prisma = new PrismaClient();
 
 // Obtener todas las ventas con filtros opcionales
@@ -11,7 +12,16 @@ export const getSales = async (req, res) => {
     if (startDate || endDate) {
       // Con filtros de fecha, usar consulta raw para zona horaria
       // Escapar valores de forma segura
-      const escapedBranch = branch ? `'${branch.replace(/'/g, "''")}'` : 'NULL';
+      let branchId = null;
+      if (branch) {
+        const branchObj = await prisma.branch.findUnique({
+          where: { name: branch }
+        });
+        if (branchObj) {
+          branchId = branchObj.id;
+        }
+      }
+      
       const escapedPaymentMethod = paymentMethod ? `'${paymentMethod.replace(/'/g, "''")}'` : 'NULL';
       
       let conditions = [];
@@ -21,8 +31,8 @@ export const getSales = async (req, res) => {
       if (endDate) {
         conditions.push(`(s."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::date <= '${endDate}'::date`);
       }
-      if (branch) {
-        conditions.push(`s.branch = ${escapedBranch}`);
+      if (branchId) {
+        conditions.push(`s."branchId" = ${branchId}`);
       }
       if (paymentMethod) {
         conditions.push(`s."paymentMethod" = ${escapedPaymentMethod}`);
@@ -36,7 +46,8 @@ export const getSales = async (req, res) => {
           s.folio,
           s.total,
           s.status,
-          s.branch,
+          s."branchName" as branch,
+          b.name as branch_name,
           s."cashRegister",
           s."paymentMethod",
           s."createdAt",
@@ -57,9 +68,10 @@ export const getSales = async (req, res) => {
             '[]'::json
           ) as details
         FROM "Sale" s
+        LEFT JOIN "Branch" b ON s."branchId" = b.id
         LEFT JOIN "SaleDetail" sd ON sd."saleId" = s.id
         ${whereClause}
-        GROUP BY s.id
+        GROUP BY s.id, b.name
         ORDER BY s.id DESC
       `;
       
@@ -67,7 +79,17 @@ export const getSales = async (req, res) => {
     } else {
       // Sin filtros de fecha, usar Prisma normal
       const where = {};
-      if (branch) where.branch = branch;
+      if (branch) {
+        const branchObj = await prisma.branch.findUnique({
+          where: { name: branch }
+        });
+        if (branchObj) {
+          where.branchId = branchObj.id;
+        } else {
+          // Si no existe la sucursal, no retornar ventas
+          return res.json([]);
+        }
+      }
       if (paymentMethod) where.paymentMethod = paymentMethod;
       
       sales = await prisma.sale.findMany({
@@ -88,17 +110,22 @@ export const getSales = async (req, res) => {
 export const createSale = async (req, res) => {
   try {
     const { folio, total, branch, cashRegister, status, paymentMethod, details } = req.body;
+    
+    // Obtener o crear sucursal
+    const branchObj = await getOrCreateBranch(branch || "Sucursal Default");
+    
     const sale = await prisma.sale.create({
       data: {
         folio,
         total,
-        branch, 
+        branchId: branchObj.id,
+        branchName: branchObj.name,
         cashRegister,
         status,
         paymentMethod,
         details: { create: details },
       },
-      include: { details: true },
+      include: { details: true, branch: true },
     });
     res.json(sale);
   } catch (error) {
@@ -137,10 +164,14 @@ export const createSalesWithDetails = async (req, res) => {
       for (const sale of sales) {
         const {id, folio, branch, cashRegister, total, status , paymentMethod,createdAt,clientName, syncStatus, details } = sale;
  
+        // Obtener o crear sucursal
+        const branchObj = await getOrCreateBranch(branch || "Sucursal Default");
+
         const createdSale = await tx.sale.create({
           data: {
             folio :'TK '+id,
-            branch, 
+            branchId: branchObj.id,
+            branchName: branchObj.name,
             cashRegister,
             total,
             status,
@@ -158,7 +189,7 @@ export const createSalesWithDetails = async (req, res) => {
               })),
             },
           },
-          include: { details: true },
+          include: { details: true, branch: true },
         });
 
         createdSales.push(createdSale);
@@ -195,8 +226,21 @@ export const getSalesStats = async (req, res) => {
     }
     
     if (branch) {
-      const escapedBranch = branch.replace(/'/g, "''");
-      whereConditions.push(`s.branch = '${escapedBranch}'`);
+      const branchObj = await prisma.branch.findUnique({
+        where: { name: branch }
+      });
+      if (branchObj) {
+        whereConditions.push(`s."branchId" = ${branchObj.id}`);
+      } else {
+        // Si no existe la sucursal, retornar estadísticas vacías
+        return res.json({
+          totalSales: 0,
+          totalAmount: 0,
+          byBranch: [],
+          byPaymentMethod: [],
+          byDay: []
+        });
+      }
     }
     
     const whereClause = whereConditions.length > 0 
@@ -218,12 +262,13 @@ export const getSalesStats = async (req, res) => {
       // Ventas por sucursal
       prisma.$queryRawUnsafe(
         `SELECT 
-          s.branch,
+          COALESCE(s."branchName", b.name, 'Sin sucursal') as branch,
           COUNT(*) as count,
           COALESCE(SUM(s.total), 0) as total
         FROM "Sale" s
+        LEFT JOIN "Branch" b ON s."branchId" = b.id
         ${whereClause}
-        GROUP BY s.branch`
+        GROUP BY COALESCE(s."branchName", b.name, 'Sin sucursal')`
       ),
       
       // Ventas por método de pago
@@ -292,9 +337,17 @@ export const getBranchStats = async (req, res) => {
     const { branch } = req.params;
     const { startDate, endDate } = req.query;
     
+    // Buscar sucursal por nombre
+    const branchObj = await prisma.branch.findUnique({
+      where: { name: branch }
+    });
+
+    if (!branchObj) {
+      return res.status(404).json({ error: 'Sucursal no encontrada' });
+    }
+    
     // Construir condiciones WHERE con zona horaria
-    const escapedBranch = branch.replace(/'/g, "''");
-    let whereConditions = [`s.branch = '${escapedBranch}'`];
+    let whereConditions = [`s."branchId" = ${branchObj.id}`];
     
     if (startDate) {
       whereConditions.push(
