@@ -37,14 +37,20 @@ export const createProductsBulk = async (req, res) => {
           kitItems = []
         } = productData;
 
-        // 1. Crear o actualizar categoría si viene en el producto
+        // 0. Obtener o crear sucursal PRIMERO (antes de usarla)
+        const branchObj = await getOrCreateBranch(branch || "Sucursal Default");
+        const branchId = branchObj.id;
+        
+        // 1. Validar y crear/actualizar categoría si viene en el producto
         let finalCategoryId = categoryId;
         if (category && category.id) {
+          // Verificar si la categoría ya existe
           const existingCategory = await tx.category.findUnique({
             where: { id: category.id }
           });
 
           if (!existingCategory) {
+            // Crear nueva categoría solo si no existe
             const newCategory = await tx.category.create({
               data: {
                 id: category.id,
@@ -55,8 +61,9 @@ export const createProductsBulk = async (req, res) => {
               }
             });
             finalCategoryId = newCategory.id;
+            console.log(`✅ Categoría creada: ${category.name} (ID: ${category.id})`);
           } else {
-            // Actualizar categoría si existe
+            // Actualizar categoría existente
             await tx.category.update({
               where: { id: category.id },
               data: {
@@ -67,10 +74,36 @@ export const createProductsBulk = async (req, res) => {
               }
             });
             finalCategoryId = existingCategory.id;
+            console.log(`✅ Categoría actualizada: ${category.name} (ID: ${category.id})`);
           }
+        } else if (categoryId) {
+          // Si solo viene categoryId, validar que existe
+          const existingCategory = await tx.category.findUnique({
+            where: { id: categoryId }
+          });
+          if (!existingCategory) {
+            console.warn(`⚠️  Categoría con ID ${categoryId} no existe, se omitirá el producto ${name}`);
+            continue; // Saltar este producto si la categoría no existe
+          }
+          finalCategoryId = categoryId;
         }
 
-        // 2. Crear o actualizar producto
+        // 2. Validar que tenemos una categoría válida antes de crear/actualizar producto
+        if (!finalCategoryId) {
+          console.warn(`⚠️  Producto ${name} (código: ${code}) no tiene categoría válida, se omitirá`);
+          continue; // Saltar este producto si no tiene categoría
+        }
+
+        // Verificar que la categoría existe
+        const categoryExists = await tx.category.findUnique({
+          where: { id: finalCategoryId }
+        });
+        if (!categoryExists) {
+          console.warn(`⚠️  Categoría con ID ${finalCategoryId} no existe para producto ${name}, se omitirá`);
+          continue; // Saltar este producto si la categoría no existe
+        }
+
+        // 3. Crear o actualizar producto
         // Buscar si ya existe un producto con el mismo código y sucursal
         let product;
         const existingProduct = code 
@@ -101,6 +134,7 @@ export const createProductsBulk = async (req, res) => {
               branchId: branchId,
             }
           });
+          console.log(`✅ Producto actualizado: ${name} (ID: ${existingProduct.id})`);
         } else {
           // Crear nuevo producto
           product = await tx.product.create({
@@ -120,9 +154,10 @@ export const createProductsBulk = async (req, res) => {
               createdAt: createdAt ? new Date(createdAt) : new Date()
             }
           });
+          console.log(`✅ Producto creado: ${name} (ID: ${product.id})`);
         }
 
-        // 3. Manejar presentaciones
+        // 4. Manejar presentaciones
         if (!isKit && presentations.length > 0) {
           // Eliminar presentaciones existentes que no vienen en el request
           const existingPresentationIds = presentations
@@ -179,7 +214,7 @@ export const createProductsBulk = async (req, res) => {
           }
         }
 
-        // 4. Manejar inventario
+        // 5. Manejar inventario
         if (inventory) {
           // Obtener sucursal del inventario o usar la del producto
           const invBranchName = inventory.branch || branch || "Sucursal Default";
