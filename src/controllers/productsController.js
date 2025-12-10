@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { getOrCreateBranch } from '../services/branchService.js';
+import { assignEmojiToProduct } from '../services/emojiService.js';
 const prisma = new PrismaClient();
 
 // Crear productos en bulk (con categorías, presentaciones e inventario)
@@ -40,6 +41,9 @@ export const createProductsBulk = async (req, res) => {
         // 0. Obtener o crear sucursal PRIMERO (antes de usarla)
         const branchObj = await getOrCreateBranch(branch || "Sucursal Default");
         const branchId = branchObj.id;
+        
+        // 0.5. Asignar emoji automáticamente si no tiene icono
+        const finalIcon = assignEmojiToProduct({ icon, name, description });
         
         // 1. Validar y crear/actualizar categoría si viene en el producto
         let finalCategoryId = categoryId;
@@ -127,14 +131,14 @@ export const createProductsBulk = async (req, res) => {
               price,
               cost,
               description,
-              icon,
+              icon: finalIcon,
               categoryId: finalCategoryId,
               trackInventory: trackInventory || false,
               isKit: isKit || false,
               branchId: branchId,
             }
           });
-          console.log(`✅ Producto actualizado: ${name} (ID: ${existingProduct.id})`);
+          console.log(`✅ Producto actualizado: ${name} (ID: ${existingProduct.id}) - Emoji: ${finalIcon}`);
         } else {
           // Crear nuevo producto
           product = await tx.product.create({
@@ -146,7 +150,7 @@ export const createProductsBulk = async (req, res) => {
               price,
               cost,
               description,
-              icon,
+              icon: finalIcon,
               categoryId: finalCategoryId,
               trackInventory: trackInventory || false,
               isKit: isKit || false,
@@ -154,7 +158,7 @@ export const createProductsBulk = async (req, res) => {
               createdAt: createdAt ? new Date(createdAt) : new Date()
             }
           });
-          console.log(`✅ Producto creado: ${name} (ID: ${product.id})`);
+          console.log(`✅ Producto creado: ${name} (ID: ${product.id}) - Emoji: ${finalIcon}`);
         }
 
         // 4. Manejar presentaciones
@@ -459,7 +463,15 @@ export const getCategoriesByBranch = async (req, res) => {
 // Obtener todos los productos de todas las sucursales (para tienda en línea)
 export const getAllProducts = async (req, res) => {
   try {
-    const { includeInventory, includePresentations, search, categoryId, branch } = req.query;
+    const { 
+      includeInventory, 
+      includePresentations, 
+      search, 
+      categoryId, 
+      branch,
+      limit = 30,
+      offset = 0
+    } = req.query;
 
     const where = {};
     
@@ -484,24 +496,54 @@ export const getAllProducts = async (req, res) => {
       if (branchObj) {
         where.branchId = branchObj.id;
       } else {
-        // Si no existe la sucursal, no retornar productos
-        return res.json([]);
+        // Si no existe la sucursal, retornar respuesta vacía con paginación
+        return res.json({
+          products: [],
+          total: 0,
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+          hasMore: false
+        });
       }
     }
 
     const include = {
       category: true,
+      branch: true,
       ...(includePresentations === 'true' && { presentations: true }),
       ...(includeInventory === 'true' && { inventory: true })
     };
 
+    // Obtener total de productos (para paginación)
+    const total = await prisma.product.count({ where });
+
+    // Obtener productos con paginación
     const products = await prisma.product.findMany({
       where,
       include,
-      orderBy: { name: 'asc' }
+      orderBy: { name: 'asc' },
+      take: parseInt(limit),
+      skip: parseInt(offset)
     });
 
-    res.json(products);
+    // Mapear productos para incluir branch.name como branch para compatibilidad con frontend
+    const productsWithBranch = products.map(product => ({
+      ...product,
+      branch: product.branch?.name || null
+    }));
+
+    const currentOffset = parseInt(offset);
+    const currentLimit = parseInt(limit);
+    const hasMore = (currentOffset + currentLimit) < total;
+
+    res.json({
+      products: productsWithBranch,
+      total,
+      limit: currentLimit,
+      offset: currentOffset,
+      hasMore,
+      nextOffset: hasMore ? currentOffset + currentLimit : null
+    });
   } catch (error) {
     console.error('Error obteniendo todos los productos:', error);
     res.status(500).json({ error: 'Error obteniendo productos' });
