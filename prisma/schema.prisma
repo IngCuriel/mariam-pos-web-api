@@ -113,6 +113,7 @@ model Product {
   @@index([name])
   @@index([branchId])
   @@index([categoryId])
+  @@unique([code, branchId])
 }
 
 model ProductPresentation {

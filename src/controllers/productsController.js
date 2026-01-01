@@ -108,23 +108,28 @@ export const createProductsBulk = async (req, res) => {
         }
 
         // 3. Crear o actualizar producto
-        // Buscar si ya existe un producto con el mismo código y sucursal
+        // Buscar si ya existe un producto con el mismo código EN LA MISMA SUCURSAL
+        // (Los códigos pueden repetirse entre diferentes sucursales)
+        // Si se repite el mismo código y sucursal, se actualiza; si no, se registra
         let product;
-        const existingProduct = code 
-          ? await tx.product.findFirst({
-              where: {
-                code: code,
-                branchId: branchId
-              }
-            })
-          : null;
+        let existingProduct = null;
+        
+        if (code && code.trim() !== '') {
+          // Buscar solo dentro de la misma sucursal por código
+          existingProduct = await tx.product.findFirst({
+            where: {
+              code: code.trim(),
+              branchId: branchId
+            }
+          });
+        }
 
         if (existingProduct) {
-          // Actualizar producto existente
+          // Si existe producto con mismo código y sucursal → ACTUALIZAR
           product = await tx.product.update({
             where: { id: existingProduct.id },
             data: {
-              code,
+              code: code ? code.trim() : null,
               name,
               status,
               saleType,
@@ -138,27 +143,59 @@ export const createProductsBulk = async (req, res) => {
               branchId: branchId,
             }
           });
-          console.log(`✅ Producto actualizado: ${name} (ID: ${existingProduct.id}) - Emoji: ${finalIcon}`);
+          console.log(`✅ Producto actualizado: ${name} (Código: ${code || 'N/A'}, ID: ${existingProduct.id}, Sucursal: ${branchId}) - Emoji: ${finalIcon}`);
         } else {
+          // Si NO existe producto con mismo código y sucursal → REGISTRAR (crear nuevo)
           // Crear nuevo producto
-          product = await tx.product.create({
-            data: {
-              code,
-              name,
-              status,
-              saleType,
-              price,
-              cost,
-              description,
-              icon: finalIcon,
-              categoryId: finalCategoryId,
-              trackInventory: trackInventory || false,
-              isKit: isKit || false,
-              branchId: branchId,
-              createdAt: createdAt ? new Date(createdAt) : new Date()
+          try {
+            product = await tx.product.create({
+              data: {
+                code: code ? code.trim() : null,
+                name,
+                status,
+                saleType,
+                price,
+                cost,
+                description,
+                icon: finalIcon,
+                categoryId: finalCategoryId,
+                trackInventory: trackInventory || false,
+                isKit: isKit || false,
+                branchId: branchId,
+                createdAt: createdAt ? new Date(createdAt) : new Date()
+              }
+            });
+            console.log(`✅ Producto creado: ${name} (Código: ${code || 'N/A'}, ID: ${product.id}, Sucursal: ${branchId}) - Emoji: ${finalIcon}`);
+          } catch (createError) {
+            // Si falla por restricción única, verificar si es dentro de la misma sucursal
+            if (createError.code === 'P2002' && createError.meta?.target?.includes('code')) {
+              // Buscar el producto que tiene ese código en la misma sucursal
+              const conflictingProduct = await tx.product.findFirst({
+                where: { 
+                  code: code,
+                  branchId: branchId
+                },
+                include: { branch: true }
+              });
+              
+              if (conflictingProduct) {
+                // Conflicto dentro de la misma sucursal (esto no debería pasar si la lógica anterior está bien)
+                const conflictInfo = `El código "${code}" ya está en uso por el producto "${conflictingProduct.name}" (ID: ${conflictingProduct.id}) en esta sucursal`;
+                console.error(`❌ Error al crear producto: ${name} (Código: ${code}, Sucursal: ${branchId})`);
+                console.error(`   ${conflictInfo}`);
+                throw new Error(`No se pudo crear el producto "${name}" con código "${code}". ${conflictInfo}`);
+              } else {
+                // Puede haber una restricción única a nivel de base de datos que no permite códigos duplicados
+                // incluso entre diferentes sucursales. Esto necesita una migración.
+                console.error(`❌ Error: Restricción única en código "${code}" detectada a nivel de base de datos.`);
+                console.error(`   Esto puede indicar que hay una restricción única en la columna 'code' que necesita ser eliminada.`);
+                console.error(`   El código debería poder repetirse entre diferentes sucursales.`);
+                throw new Error(`No se pudo crear el producto "${name}" con código "${code}". Hay una restricción única a nivel de base de datos que impide códigos duplicados. Se necesita una restricción única compuesta (code, branchId) en lugar de una única en 'code'.`);
+              }
             }
-          });
-          console.log(`✅ Producto creado: ${name} (ID: ${product.id}) - Emoji: ${finalIcon}`);
+            // Re-lanzar el error si no es de restricción única
+            throw createError;
+          }
         }
 
         // 4. Manejar presentaciones
@@ -317,7 +354,29 @@ export const createProductsBulk = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error en transacción de productos:', error);
-    res.status(500).json({ error: 'Error al procesar los productos', details: error.message });
+    
+    // Proporcionar información más detallada sobre el error
+    let errorMessage = 'Error al procesar los productos';
+    let errorDetails = error.message;
+    
+    if (error.code === 'P2002') {
+      // Error de restricción única
+      const target = error.meta?.target || [];
+      if (target.includes('code')) {
+        errorMessage = 'Error: Código de producto duplicado';
+        errorDetails = `El código del producto ya existe en la base de datos. ${error.message}`;
+      } else {
+        errorMessage = 'Error: Restricción única violada';
+        errorDetails = `Campo(s) duplicado(s): ${target.join(', ')}. ${error.message}`;
+      }
+    }
+    
+    res.status(500).json({ 
+      error: errorMessage, 
+      details: errorDetails,
+      code: error.code,
+      meta: error.meta
+    });
   }
 };
 
@@ -384,6 +443,15 @@ export const getProductsByBranch = async (req, res) => {
   try {
     const { branch } = req.params;
     const { includeInventory, includePresentations } = req.query;
+
+    // Buscar sucursal por nombre
+    const branchObj = await prisma.branch.findUnique({
+      where: { name: branch }
+    });
+
+    if (!branchObj) {
+      return res.status(404).json({ error: 'Sucursal no encontrada' });
+    }
 
     const include = {
       category: true,
