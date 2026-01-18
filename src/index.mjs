@@ -58,11 +58,13 @@ import salesRouter from "./routes/sales.js";
 import productsRouter from "./routes/products.js";
 import authRouter from "./routes/auth.js";
 import cashExpressRouter from "./routes/cashExpress.js";
+import ordersRouter from "./routes/orders.js";
  
 app.use("/api/sales", salesRouter);
 app.use("/api/products", productsRouter);
 app.use("/api/auth", authRouter);
-app.use("/api/cash-express", cashExpressRouter); 
+app.use("/api/cash-express", cashExpressRouter);
+app.use("/api/orders", ordersRouter); 
 // -------------------
 // Iniciar servidor
 // -------------------
