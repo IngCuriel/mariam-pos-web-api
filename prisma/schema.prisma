@@ -252,6 +252,7 @@ model OrderItem {
 
 enum CashExpressStatus {
   PENDIENTE
+  REBOTADO
   DEPOSITO_VALIDADO
   ENTREGADO
   CANCELADO
@@ -274,7 +275,10 @@ model CashExpressRequest {
   relationship    String
   
   status          CashExpressStatus  @default(PENDIENTE)
-  depositValidatedAt DateTime?
+  rejectionReason String?           // Motivo de rechazo si fue rebotada
+  depositReceipt  String?            // URL o base64 del comprobante de depósito
+  depositValidatedAt DateTime?       // Fecha de validación del depósito
+  availableFrom   DateTime?          // Fecha/hora desde la cual está disponible para recoger
   deliveredAt     DateTime?
   
   userId          Int

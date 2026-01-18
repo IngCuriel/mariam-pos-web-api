@@ -148,24 +148,49 @@ export const getRequestById = async (req, res) => {
 export const updateRequestStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, rejectionReason, availableFrom } = req.body;
 
-    const validStatuses = ['PENDIENTE', 'DEPOSITO_VALIDADO', 'ENTREGADO', 'CANCELADO'];
+    const validStatuses = ['PENDIENTE', 'REBOTADO', 'DEPOSITO_VALIDADO', 'ENTREGADO', 'CANCELADO'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         error: 'Estado inválido'
       });
     }
 
+    // Si se rebota, se requiere motivo
+    if (status === 'REBOTADO' && !rejectionReason) {
+      return res.status(400).json({
+        error: 'Se requiere un motivo de rechazo'
+      });
+    }
+
     const updateData = {
       status,
-      ...(status === 'DEPOSITO_VALIDADO' && { depositValidatedAt: new Date() }),
+      ...(status === 'REBOTADO' && { 
+        rejectionReason,
+        // Limpiar comprobante si se rebota
+        depositReceipt: null 
+      }),
+      ...(status === 'DEPOSITO_VALIDADO' && { 
+        depositValidatedAt: new Date(),
+        // Si se proporciona fecha de disponibilidad, usarla
+        ...(availableFrom && { availableFrom: new Date(availableFrom) })
+      }),
       ...(status === 'ENTREGADO' && { deliveredAt: new Date() })
     };
 
     const request = await prisma.cashExpressRequest.update({
       where: { id: parseInt(id) },
-      data: updateData
+      data: updateData,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      }
     });
 
     res.json({
@@ -176,6 +201,73 @@ export const updateRequestStatus = async (req, res) => {
     console.error('Error actualizando estado:', error);
     res.status(500).json({
       error: 'Error al actualizar estado'
+    });
+  }
+};
+
+// Subir comprobante de depósito
+export const uploadDepositReceipt = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.userId;
+    const { depositReceipt } = req.body; // Base64 de la imagen
+
+    if (!depositReceipt) {
+      return res.status(400).json({
+        error: 'Se requiere el comprobante de depósito'
+      });
+    }
+
+    // Verificar que la solicitud existe y pertenece al usuario
+    const request = await prisma.cashExpressRequest.findUnique({
+      where: { id: parseInt(id) }
+    });
+
+    if (!request) {
+      return res.status(404).json({
+        error: 'Solicitud no encontrada'
+      });
+    }
+
+    if (request.userId !== userId) {
+      return res.status(403).json({
+        error: 'No tienes permiso para actualizar esta solicitud'
+      });
+    }
+
+    if (request.status !== 'PENDIENTE' && request.status !== 'REBOTADO') {
+      return res.status(400).json({
+        error: 'Solo se puede subir comprobante en solicitudes pendientes o rebotadas'
+      });
+    }
+
+    // Actualizar comprobante y cambiar estado a PENDIENTE si estaba rebotada
+    const updatedRequest = await prisma.cashExpressRequest.update({
+      where: { id: parseInt(id) },
+      data: {
+        depositReceipt,
+        status: 'PENDIENTE', // Si estaba rebotada, volver a pendiente
+        rejectionReason: null // Limpiar motivo de rechazo
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    res.json({
+      message: 'Comprobante subido exitosamente',
+      request: updatedRequest
+    });
+  } catch (error) {
+    console.error('Error subiendo comprobante:', error);
+    res.status(500).json({
+      error: 'Error al subir comprobante'
     });
   }
 };

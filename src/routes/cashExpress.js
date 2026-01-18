@@ -3,7 +3,8 @@ import {
   createRequest,
   getRequests,
   getRequestById,
-  updateRequestStatus
+  updateRequestStatus,
+  uploadDepositReceipt
 } from '../controllers/cashExpressController.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 
@@ -16,6 +17,9 @@ router.use(authenticate);
 router.post('/', createRequest);
 router.get('/', getRequests);
 router.get('/:id', getRequestById);
+
+// Rutas para clientes (subir comprobante)
+router.patch('/:id/receipt', uploadDepositReceipt);
 
 // Rutas solo para admin
 router.patch('/:id/status', requireAdmin, updateRequestStatus);
