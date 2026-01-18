@@ -438,6 +438,58 @@ export const createCategoriesBulk = async (req, res) => {
   }
 };
 
+// Obtener un producto por ID
+export const getProductById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { includeInventory, includePresentations } = req.query;
+
+    if (!id) {
+      return res.status(400).json({ error: 'ID de producto requerido' });
+    }
+
+    const productId = Number.parseInt(id, 10);
+    if (Number.isNaN(productId)) {
+      return res.status(400).json({ error: 'ID de producto inválido' });
+    }
+
+    const include = {
+      category: true,
+      branch: true,
+      ...(includePresentations === 'true' && { presentations: true }),
+      ...(includeInventory === 'true' && { inventory: true }),
+      ...(includePresentations === 'true' && {
+        kitItems: {
+          include: {
+            product: true,
+            presentation: true
+          }
+        }
+      })
+    };
+
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include
+    });
+
+    if (!product) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+
+    // Mapear producto para incluir branch.name como branch para compatibilidad con frontend
+    const productWithBranch = {
+      ...product,
+      branch: product.branch?.name || null
+    };
+
+    res.json(productWithBranch);
+  } catch (error) {
+    console.error('Error obteniendo producto por ID:', error);
+    res.status(500).json({ error: 'Error obteniendo producto' });
+  }
+};
+
 // Obtener productos por sucursal
 export const getProductsByBranch = async (req, res) => {
   try {
