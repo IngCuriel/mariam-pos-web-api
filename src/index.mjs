@@ -16,9 +16,13 @@ app.use(express.json());
 // Rutas 
 import salesRouter from "./routes/sales.js";
 import productsRouter from "./routes/products.js";
+import authRouter from "./routes/auth.js";
+import cashExpressRouter from "./routes/cashExpress.js";
  
 app.use("/api/sales", salesRouter);
-app.use("/api/products", productsRouter); 
+app.use("/api/products", productsRouter);
+app.use("/api/auth", authRouter);
+app.use("/api/cash-express", cashExpressRouter); 
 // -------------------
 // Iniciar servidor
 // -------------------

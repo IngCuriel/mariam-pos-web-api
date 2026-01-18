@@ -31,6 +31,7 @@ model Branch {
   categories  Category[]
   presentations ProductPresentation[]
   inventories Inventory[]
+  orders      Order[]
 
   @@index([name])
   @@index([isActive])
@@ -168,4 +169,121 @@ model KitItem {
   @@unique([kitId, productId, presentationId])
   @@index([kitId])
   @@index([productId])
+}
+
+// ============================================================
+// 👤 MÓDULO DE USUARIOS Y AUTENTICACIÓN
+// ============================================================
+
+enum UserRole {
+  ADMIN
+  CLIENTE
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String
+  phone     String?
+  password  String   // Hash de la contraseña
+  role      UserRole @default(CLIENTE)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  orders            Order[]
+  cashExpressRequests CashExpressRequest[]
+
+  @@index([email])
+  @@index([role])
+}
+
+// ============================================================
+// 📦 MÓDULO DE PEDIDOS (ORDERS)
+// ============================================================
+
+enum OrderStatus {
+  PENDIENTE
+  CONFIRMADO
+  EN_PREPARACION
+  LISTO
+  ENTREGADO
+  CANCELADO
+}
+
+model Order {
+  id          Int       @id @default(autoincrement())
+  folio       String?   @unique
+  total       Float
+  status      OrderStatus @default(PENDIENTE)
+  notes       String?
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  branchId    Int?
+  branch      Branch?   @relation(fields: [branchId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items       OrderItem[]
+
+  @@index([userId])
+  @@index([branchId])
+  @@index([status])
+}
+
+model OrderItem {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   Int
+  productName String
+  quantity    Int
+  unitPrice   Float
+  subtotal    Float
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+}
+
+// ============================================================
+// 💰 MÓDULO DE EFECTIVO EXPRESS
+// ============================================================
+
+enum CashExpressStatus {
+  PENDIENTE
+  DEPOSITO_VALIDADO
+  ENTREGADO
+  CANCELADO
+}
+
+model CashExpressRequest {
+  id              Int                @id @default(autoincrement())
+  folio           String?            @unique
+  amount          Float              // Monto a enviar
+  commission      Float              @default(65) // Comisión
+  totalToDeposit  Float              // Total a depositar (amount + commission)
+  
+  // Datos del remitente
+  senderName      String
+  senderPhone     String
+  
+  // Datos del destinatario
+  recipientName   String
+  recipientPhone  String
+  relationship    String
+  
+  status          CashExpressStatus  @default(PENDIENTE)
+  depositValidatedAt DateTime?
+  deliveredAt     DateTime?
+  
+  userId          Int
+  user            User               @relation(fields: [userId], references: [id])
+  
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([folio])
 }
