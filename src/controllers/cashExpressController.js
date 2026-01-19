@@ -210,7 +210,7 @@ export const uploadDepositReceipt = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.userId;
-    const { depositReceipt } = req.body; // Base64 de la imagen
+    const { depositReceipt } = req.body; // URL de Cloudinary
 
     if (!depositReceipt) {
       return res.status(400).json({
