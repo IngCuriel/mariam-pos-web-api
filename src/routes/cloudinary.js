@@ -15,7 +15,7 @@ router.post('/signature', (req, res) => {
   } catch (error) {
     console.error('Error generando signature:', error);
     res.status(500).json({
-      error: 'Error al generar signature para upload'
+      error: error.message || 'Error al generar signature para upload. Verifica que Cloudinary esté configurado correctamente.'
     });
   }
 });

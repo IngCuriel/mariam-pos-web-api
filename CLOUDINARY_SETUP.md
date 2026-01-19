@@ -1,5 +1,9 @@
 # Configuración de Cloudinary
 
+## ⚠️ IMPORTANTE: Configuración Requerida
+
+Para que Cloudinary funcione, **DEBES** configurar las variables de entorno.
+
 ## Credenciales necesarias
 
 Para usar Cloudinary, necesitas agregar las siguientes variables de entorno en tu archivo `.env`:
@@ -21,8 +25,8 @@ CLOUDINARY_API_SECRET=tu_api_secret
 
 ## Configuración del archivo .env
 
-1. Crea un archivo `.env` en la raíz del proyecto `mariam-pos-web-api/`
-2. Agrega las siguientes líneas con tus credenciales:
+1. **Crea o edita** el archivo `.env` en la raíz del proyecto `mariam-pos-web-api/`
+2. Agrega las siguientes líneas con tus credenciales **reales**:
 
 ```env
 CLOUDINARY_CLOUD_NAME=tu_cloud_name_aqui
@@ -30,11 +34,31 @@ CLOUDINARY_API_KEY=tu_api_key_aqui
 CLOUDINARY_API_SECRET=tu_api_secret_aqui
 ```
 
+**Ejemplo:**
+```env
+CLOUDINARY_CLOUD_NAME=dabc123
+CLOUDINARY_API_KEY=123456789012345
+CLOUDINARY_API_SECRET=abcdefghijklmnopqrstuvwxyz123456
+```
+
 ## Verificación
 
-Una vez configurado, reinicia el servidor y verifica que no haya errores al iniciar.
+1. **Reinicia el servidor** después de agregar las variables
+2. Verifica que no haya warnings al iniciar sobre Cloudinary
+3. Prueba el endpoint: `POST /api/cloudinary/signature` (debe retornar un objeto con signature, timestamp, etc.)
 
-El endpoint `/api/cloudinary/signature` debería funcionar correctamente.
+## Solución de problemas
+
+### Error: "cloud_name is disabled"
+- **Causa**: Las variables de entorno no están configuradas o están vacías
+- **Solución**: 
+  1. Verifica que el archivo `.env` existe en `mariam-pos-web-api/`
+  2. Verifica que las variables tienen valores (no están vacías)
+  3. Reinicia el servidor después de agregar/modificar el `.env`
+
+### Error: "Cloudinary no está configurado"
+- **Causa**: Faltan variables de entorno
+- **Solución**: Agrega todas las variables requeridas al `.env`
 
 ## Notas de seguridad
 
