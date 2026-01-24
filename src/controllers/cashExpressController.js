@@ -247,17 +247,15 @@ export const uploadDepositReceipt = async (req, res) => {
       });
     }
 
-    // Determinar el nuevo estado basado en si ya había un comprobante
-    const hasExistingReceipt = !!request.depositReceipt;
-    const newStatus = hasExistingReceipt ? 'EN_ESPERA_CONFIRMACION' : 'EN_ESPERA_CONFIRMACION';
-
-    // Actualizar comprobante y cambiar estado
+    // Actualizar solo el comprobante, SIN cambiar el estado
+    // El estado solo cambia cuando el usuario confirma/envía el comprobante
     const updatedRequest = await prisma.cashExpressRequest.update({
       where: { id: parseInt(id) },
       data: {
         depositReceipt,
-        status: newStatus, // Cambiar a "En espera de confirmación"
-        rejectionReason: null // Limpiar motivo de rechazo si había uno
+        // Mantener el estado actual (no cambiar automáticamente)
+        // Limpiar motivo de rechazo si había uno
+        ...(request.status === 'REBOTADO' && { rejectionReason: null })
       },
       include: {
         user: {
@@ -278,6 +276,71 @@ export const uploadDepositReceipt = async (req, res) => {
     console.error('Error subiendo comprobante:', error);
     res.status(500).json({
       error: 'Error al subir comprobante'
+    });
+  }
+};
+
+// Confirmar/Enviar comprobante (cambia estado a EN_ESPERA_CONFIRMACION)
+export const confirmDepositReceipt = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.userId;
+
+    // Verificar que la solicitud existe y pertenece al usuario
+    const request = await prisma.cashExpressRequest.findUnique({
+      where: { id: parseInt(id) }
+    });
+
+    if (!request) {
+      return res.status(404).json({
+        error: 'Solicitud no encontrada'
+      });
+    }
+
+    if (request.userId !== userId) {
+      return res.status(403).json({
+        error: 'No tienes permiso para actualizar esta solicitud'
+      });
+    }
+
+    if (!request.depositReceipt) {
+      return res.status(400).json({
+        error: 'No hay comprobante para confirmar. Por favor, sube un comprobante primero.'
+      });
+    }
+
+    if (request.status !== 'PENDIENTE' && request.status !== 'REBOTADO') {
+      return res.status(400).json({
+        error: 'Solo se puede confirmar comprobante en solicitudes pendientes o rebotadas'
+      });
+    }
+
+    // Cambiar estado a "En espera de confirmación"
+    const updatedRequest = await prisma.cashExpressRequest.update({
+      where: { id: parseInt(id) },
+      data: {
+        status: 'EN_ESPERA_CONFIRMACION',
+        rejectionReason: null // Limpiar motivo de rechazo si había uno
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    res.json({
+      message: 'Comprobante enviado a revisión exitosamente',
+      request: updatedRequest
+    });
+  } catch (error) {
+    console.error('Error confirmando comprobante:', error);
+    res.status(500).json({
+      error: 'Error al confirmar comprobante'
     });
   }
 };
