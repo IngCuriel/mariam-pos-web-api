@@ -43,9 +43,10 @@ export const generateUploadSignature = (params = {}) => {
   };
 
   // Parámetros que se incluyen en la firma
-  // IMPORTANTE: Cloudinary ignora resource_type=image cuando se usa el endpoint /image/upload
-  // Por lo tanto, NO debemos incluirlo en la firma si es el valor por defecto
-  // Solo incluimos parámetros que Cloudinary realmente procesará
+  // IMPORTANTE: Para uploads directos a Cloudinary, TODOS los parámetros que se envíen
+  // en el FormData (excepto 'file') DEBEN estar en la firma
+  // Sin embargo, cuando usamos el endpoint /image/upload, Cloudinary ignora resource_type=image
+  // Por lo tanto, NO lo incluimos en la firma ni en el FormData si es 'image'
   const paramsToSign = {
     folder: defaultParams.folder,
     timestamp: timestamp,
@@ -56,6 +57,10 @@ export const generateUploadSignature = (params = {}) => {
   if (defaultParams.resource_type && defaultParams.resource_type !== 'image') {
     paramsToSign.resource_type = defaultParams.resource_type;
   }
+  
+  // IMPORTANTE: También agregar api_key a la firma si se va a enviar en el FormData
+  // Cloudinary requiere que api_key esté en la firma si se envía como parámetro
+  paramsToSign.api_key = apiKey;
 
   // Ordenar parámetros alfabéticamente (requerido por Cloudinary)
   const sortedKeys = Object.keys(paramsToSign).sort();
