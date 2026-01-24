@@ -317,11 +317,12 @@ export const confirmDepositReceipt = async (req, res) => {
       });
     }
 
-    // Cambiar estado a "En espera de confirmación"
+    // Cambiar estado a "En espera de confirmación" y guardar fecha de envío
     const updatedRequest = await prisma.cashExpressRequest.update({
       where: { id: parseInt(id) },
       data: {
         status: 'EN_ESPERA_CONFIRMACION',
+        receiptSentAt: new Date(), // Guardar fecha de envío del comprobante
         rejectionReason: null // Limpiar motivo de rechazo si había uno
       },
       include: {

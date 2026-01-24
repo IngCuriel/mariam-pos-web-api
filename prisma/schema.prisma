@@ -278,6 +278,7 @@ model CashExpressRequest {
   status          CashExpressStatus  @default(PENDIENTE)
   rejectionReason String?           // Motivo de rechazo si fue rebotada
   depositReceipt  String?            // URL o base64 del comprobante de depósito
+  receiptSentAt   DateTime?          // Fecha de envío del comprobante a revisión
   depositValidatedAt DateTime?       // Fecha de validación del depósito
   availableFrom   DateTime?          // Fecha/hora desde la cual está disponible para recoger
   deliveredAt     DateTime?
