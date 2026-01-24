@@ -29,27 +29,24 @@ export const createRequest = async (req, res) => {
       });
     }
 
-    if (!senderName || !senderPhone || !recipientName || !recipientPhone || !relationship) {
-      return res.status(400).json({
-        error: 'Todos los campos son requeridos'
-      });
-    }
+    // Los datos del remitente y destinatario son opcionales al crear la solicitud
+    // Se pedirán después de que el admin valide el depósito
 
     const commission = 65;
     const totalToDeposit = amount + commission;
 
-    // Crear solicitud
+    // Crear solicitud (solo con el monto)
     const request = await prisma.cashExpressRequest.create({
       data: {
         folio: generateFolio(),
         amount: parseFloat(amount),
         commission,
         totalToDeposit,
-        senderName,
-        senderPhone,
-        recipientName,
-        recipientPhone,
-        relationship,
+        senderName: senderName || null,
+        senderPhone: senderPhone || null,
+        recipientName: recipientName || null,
+        recipientPhone: recipientPhone || null,
+        relationship: relationship || null,
         userId,
         status: 'PENDIENTE'
       }
@@ -336,6 +333,77 @@ export const uploadDepositReceipt = async (req, res) => {
     console.error('Error subiendo comprobante:', error);
     res.status(500).json({
       error: 'Error al subir comprobante'
+    });
+  }
+};
+
+// Actualizar datos del remitente y destinatario (solo cuando el depósito está validado)
+export const updateRecipientData = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.userId;
+    const { senderName, senderPhone, recipientName, recipientPhone, relationship } = req.body;
+
+    // Verificar que la solicitud existe y pertenece al usuario
+    const request = await prisma.cashExpressRequest.findUnique({
+      where: { id: parseInt(id) }
+    });
+
+    if (!request) {
+      return res.status(404).json({
+        error: 'Solicitud no encontrada'
+      });
+    }
+
+    if (request.userId !== userId) {
+      return res.status(403).json({
+        error: 'No tienes permiso para actualizar esta solicitud'
+      });
+    }
+
+    // Solo permitir actualizar cuando el depósito está validado
+    if (request.status !== 'DEPOSITO_VALIDADO') {
+      return res.status(400).json({
+        error: 'Solo se pueden actualizar los datos cuando el depósito está validado'
+      });
+    }
+
+    // Validar que todos los campos estén presentes
+    if (!senderName || !senderPhone || !recipientName || !recipientPhone || !relationship) {
+      return res.status(400).json({
+        error: 'Todos los campos son requeridos'
+      });
+    }
+
+    // Actualizar los datos
+    const updatedRequest = await prisma.cashExpressRequest.update({
+      where: { id: parseInt(id) },
+      data: {
+        senderName,
+        senderPhone,
+        recipientName,
+        recipientPhone,
+        relationship
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    res.json({
+      message: 'Datos actualizados exitosamente',
+      request: updatedRequest
+    });
+  } catch (error) {
+    console.error('Error actualizando datos:', error);
+    res.status(500).json({
+      error: 'Error al actualizar datos'
     });
   }
 };

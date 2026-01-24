@@ -310,14 +310,14 @@ model CashExpressRequest {
   commission     Float   @default(65) // Comisión
   totalToDeposit Float // Total a depositar (amount + commission)
 
-  // Datos del remitente
-  senderName  String
-  senderPhone String
+  // Datos del remitente (opcionales hasta que se valide el depósito)
+  senderName  String?
+  senderPhone String?
 
-  // Datos del destinatario
-  recipientName  String
-  recipientPhone String
-  relationship   String
+  // Datos del destinatario (opcionales hasta que se valide el depósito)
+  recipientName  String?
+  recipientPhone String?
+  relationship   String?
 
   status             CashExpressStatus @default(PENDIENTE)
   rejectionReason    String? // Motivo de rechazo si fue rebotada

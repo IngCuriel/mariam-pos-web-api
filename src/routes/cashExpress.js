@@ -7,6 +7,7 @@ import {
   uploadDepositReceipt,
   confirmDepositReceipt,
   uploadSignedReceipt,
+  updateRecipientData,
   getConfig,
   updateConfig,
   getSuggestedAvailability,
@@ -33,6 +34,7 @@ router.get('/:id', getRequestById);
 // Rutas para clientes (subir y confirmar comprobante)
 router.patch('/:id/receipt', uploadDepositReceipt);
 router.post('/:id/receipt/confirm', confirmDepositReceipt);
+router.patch('/:id/recipient-data', updateRecipientData);
 
 // Rutas de configuración
 router.get('/config/get', getConfig);
