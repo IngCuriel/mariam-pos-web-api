@@ -20,6 +20,7 @@ router.get('/:id', getOrderById);
 
 // Rutas solo para admin
 router.patch('/:id/status', requireAdmin, updateOrderStatus);
+router.patch('/:id/items-availability', requireAdmin, updateOrderItemsAvailability);
 
 export default router;
 

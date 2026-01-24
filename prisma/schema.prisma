@@ -242,7 +242,7 @@ model OrderItem {
   quantity    Int
   unitPrice   Float
   subtotal    Float
-  isAvailable Boolean? @default(null) // null = no revisado, true = disponible, false = no disponible
+  isAvailable Boolean? // null = no revisado, true = disponible, false = no disponible
   createdAt   DateTime @default(now())
 
   @@index([orderId])
