@@ -42,20 +42,22 @@ export const generateUploadSignature = (params = {}) => {
     ...params,
   };
 
-  // Parámetros que se incluyen en la firma (todos excepto api_key, file, signature)
-  // IMPORTANTE: Solo incluir parámetros que NO sean arrays y que se envíen en el FormData
-  const paramsToSign = {};
+  // Parámetros que se incluyen en la firma
+  // IMPORTANTE: Cloudinary ignora resource_type=image cuando se usa el endpoint /image/upload
+  // Por lo tanto, NO debemos incluirlo en la firma si es el valor por defecto
+  // Solo incluimos parámetros que Cloudinary realmente procesará
+  const paramsToSign = {
+    folder: defaultParams.folder,
+    timestamp: timestamp,
+  };
   
-  // Solo agregar parámetros que tienen valores definidos
-  if (defaultParams.folder) {
-    paramsToSign.folder = defaultParams.folder;
-  }
-  if (defaultParams.resource_type) {
+  // Solo agregar resource_type si NO es 'image' (el valor por defecto)
+  // Esto evita problemas de firma cuando Cloudinary ignora el parámetro
+  if (defaultParams.resource_type && defaultParams.resource_type !== 'image') {
     paramsToSign.resource_type = defaultParams.resource_type;
   }
-  paramsToSign.timestamp = timestamp;
 
-  // Ordenar parámetros alfabéticamente y crear string para firmar
+  // Ordenar parámetros alfabéticamente (requerido por Cloudinary)
   const sortedKeys = Object.keys(paramsToSign).sort();
   const sortedParams = sortedKeys
     .map(key => `${key}=${String(paramsToSign[key])}`)
@@ -64,15 +66,20 @@ export const generateUploadSignature = (params = {}) => {
   // Debug: mostrar string que se está firmando (solo en desarrollo)
   if (process.env.NODE_ENV !== 'production') {
     console.log('🔐 Cloudinary signature string:', sortedParams);
+    console.log('🔐 Cloudinary signature string with secret:', sortedParams + apiSecret.substring(0, 10) + '...');
   }
 
   // Generar signature usando SHA1
+  // IMPORTANTE: El string debe ser: sortedParams + apiSecret (sin & entre ellos)
   const signature = crypto
     .createHash('sha1')
     .update(sortedParams + apiSecret)
     .digest('hex');
 
-  return {
+  // Retornar datos de firma
+  // Nota: resource_type se incluye en la respuesta para el frontend,
+  // pero NO se incluye en la firma si es 'image' (valor por defecto)
+  const response = {
     signature,
     timestamp,
     cloud_name: cloudName,
@@ -80,6 +87,14 @@ export const generateUploadSignature = (params = {}) => {
     folder: defaultParams.folder,
     resource_type: defaultParams.resource_type,
   };
+  
+  // Debug: mostrar qué parámetros se están firmando
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('🔐 Parámetros en la firma:', Object.keys(paramsToSign).sort());
+    console.log('🔐 Parámetros retornados al frontend:', Object.keys(response).filter(k => k !== 'signature'));
+  }
+  
+  return response;
 };
 
 /**
