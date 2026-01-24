@@ -252,6 +252,7 @@ model OrderItem {
 
 enum CashExpressStatus {
   PENDIENTE
+  EN_ESPERA_CONFIRMACION
   REBOTADO
   DEPOSITO_VALIDADO
   ENTREGADO

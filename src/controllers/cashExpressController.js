@@ -150,7 +150,7 @@ export const updateRequestStatus = async (req, res) => {
     const { id } = req.params;
     const { status, rejectionReason, availableFrom } = req.body;
 
-    const validStatuses = ['PENDIENTE', 'REBOTADO', 'DEPOSITO_VALIDADO', 'ENTREGADO', 'CANCELADO'];
+    const validStatuses = ['PENDIENTE', 'EN_ESPERA_CONFIRMACION', 'REBOTADO', 'DEPOSITO_VALIDADO', 'ENTREGADO', 'CANCELADO'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         error: 'Estado inválido'
@@ -164,17 +164,23 @@ export const updateRequestStatus = async (req, res) => {
       });
     }
 
+    // Si se valida el depósito, se requiere fecha de disponibilidad
+    if (status === 'DEPOSITO_VALIDADO' && !availableFrom) {
+      return res.status(400).json({
+        error: 'Se requiere la fecha y hora de disponibilidad para recoger'
+      });
+    }
+
     const updateData = {
       status,
       ...(status === 'REBOTADO' && { 
         rejectionReason,
-        // Limpiar comprobante si se rebota
-        depositReceipt: null 
+        // NO limpiar comprobante para que el usuario pueda ver qué subió
       }),
       ...(status === 'DEPOSITO_VALIDADO' && { 
         depositValidatedAt: new Date(),
-        // Si se proporciona fecha de disponibilidad, usarla
-        ...(availableFrom && { availableFrom: new Date(availableFrom) })
+        // Fecha de disponibilidad es requerida
+        availableFrom: new Date(availableFrom)
       }),
       ...(status === 'ENTREGADO' && { deliveredAt: new Date() })
     };
@@ -235,19 +241,23 @@ export const uploadDepositReceipt = async (req, res) => {
       });
     }
 
-    if (request.status !== 'PENDIENTE' && request.status !== 'REBOTADO') {
+    if (request.status !== 'PENDIENTE' && request.status !== 'REBOTADO' && request.status !== 'EN_ESPERA_CONFIRMACION') {
       return res.status(400).json({
-        error: 'Solo se puede subir comprobante en solicitudes pendientes o rebotadas'
+        error: 'Solo se puede subir comprobante en solicitudes pendientes, en espera de confirmación o rebotadas'
       });
     }
 
-    // Actualizar comprobante y cambiar estado a PENDIENTE si estaba rebotada
+    // Determinar el nuevo estado basado en si ya había un comprobante
+    const hasExistingReceipt = !!request.depositReceipt;
+    const newStatus = hasExistingReceipt ? 'EN_ESPERA_CONFIRMACION' : 'EN_ESPERA_CONFIRMACION';
+
+    // Actualizar comprobante y cambiar estado
     const updatedRequest = await prisma.cashExpressRequest.update({
       where: { id: parseInt(id) },
       data: {
         depositReceipt,
-        status: 'PENDIENTE', // Si estaba rebotada, volver a pendiente
-        rejectionReason: null // Limpiar motivo de rechazo
+        status: newStatus, // Cambiar a "En espera de confirmación"
+        rejectionReason: null // Limpiar motivo de rechazo si había uno
       },
       include: {
         user: {
