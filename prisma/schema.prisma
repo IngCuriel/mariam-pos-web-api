@@ -18,39 +18,39 @@ datasource db {
 // ============================================================
 
 model Branch {
-  id          Int       @id @default(autoincrement())
-  name        String    @unique
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
   description String?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relaciones
-  sales       Sale[]
-  products    Product[]
-  categories  Category[]
+  sales         Sale[]
+  products      Product[]
+  categories    Category[]
   presentations ProductPresentation[]
-  inventories Inventory[]
-  orders      Order[]
+  inventories   Inventory[]
+  orders        Order[]
 
   @@index([name])
   @@index([isActive])
 }
 
 model Sale {
-  id            Int           @id @default(autoincrement())
+  id            Int          @id @default(autoincrement())
   folio         String?
   total         Float
   status        String?
   //Sucursal
   branchId      Int?
-  branch        Branch?       @relation(fields: [branchId], references: [id])
+  branch        Branch?      @relation(fields: [branchId], references: [id])
   //Caja de cobro
-  cashRegister  String?   @default("Caja 1") 
+  cashRegister  String?      @default("Caja 1")
   paymentMethod String?
-  createdAt     DateTime      @default(now())
+  createdAt     DateTime     @default(now())
   clientName    String?
-  syncStatus    String        @default("pendiente")
+  syncStatus    String       @default("pendiente")
   details       SaleDetail[]
 
   @@index([branchId])
@@ -80,91 +80,91 @@ model Category {
   branch      Branch?  @relation(fields: [branchId], references: [id])
   createdAt   DateTime @default(now())
 
-  products    Product[]
+  products Product[]
 
   @@index([branchId])
   @@index([name])
 }
 
 model Product {
-  id            Int      @id @default(autoincrement())
-  code          String?
-  name          String
-  status        Int?
-  saleType      String?
-  price         Float
-  cost          Float?
-  description   String?
-  icon          String?
+  id             Int      @id @default(autoincrement())
+  code           String?
+  name           String
+  status         Int?
+  saleType       String?
+  price          Float
+  cost           Float?
+  description    String?
+  icon           String?
   trackInventory Boolean? @default(false)
-  isKit         Boolean  @default(false)
-  branchId      Int?
-  branch        Branch?  @relation(fields: [branchId], references: [id])
-  createdAt     DateTime @default(now())
+  isKit          Boolean  @default(false)
+  branchId       Int?
+  branch         Branch?  @relation(fields: [branchId], references: [id])
+  createdAt      DateTime @default(now())
 
-  categoryId    String
-  category      Category @relation(fields: [categoryId], references: [id])
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
 
   presentations ProductPresentation[]
   inventory     Inventory?
-  kitItems      KitItem[] @relation("Kit")
-  kitsAsItem    KitItem[] @relation("KitProduct")
+  kitItems      KitItem[]             @relation("Kit")
+  kitsAsItem    KitItem[]             @relation("KitProduct")
 
   @@index([code])
   @@index([name])
   @@index([branchId])
   @@index([categoryId])
- }
+}
 
 model ProductPresentation {
-  id        Int     @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   name      String
   quantity  Int
   unitPrice Float
-  isDefault Boolean @default(false)
+  isDefault Boolean  @default(false)
   branchId  Int?
-  branch    Branch? @relation(fields: [branchId], references: [id])
+  branch    Branch?  @relation(fields: [branchId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   productId Int
   product   Product @relation(fields: [productId], references: [id])
 
-  kitItems  KitItem[]
+  kitItems KitItem[]
 
   @@index([productId])
   @@index([branchId])
 }
 
 model Inventory {
-  id            Int      @id @default(autoincrement())
-  productId     Int      @unique
-  product       Product  @relation(fields: [productId], references: [id])
-  currentStock  Int      @default(0)
-  minStock      Int      @default(0)
-  maxStock      Int?
-  trackInventory Boolean @default(false)
-  branchId      Int?
-  branch        Branch?  @relation(fields: [branchId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  productId      Int      @unique
+  product        Product  @relation(fields: [productId], references: [id])
+  currentStock   Int      @default(0)
+  minStock       Int      @default(0)
+  maxStock       Int?
+  trackInventory Boolean  @default(false)
+  branchId       Int?
+  branch         Branch?  @relation(fields: [branchId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([productId])
   @@index([branchId])
 }
 
 model KitItem {
-  id            Int     @id @default(autoincrement())
-  kitId         Int
-  kit           Product @relation("Kit", fields: [kitId], references: [id], onDelete: Cascade)
-  productId     Int
-  product       Product @relation("KitProduct", fields: [productId], references: [id])
+  id             Int                  @id @default(autoincrement())
+  kitId          Int
+  kit            Product              @relation("Kit", fields: [kitId], references: [id], onDelete: Cascade)
+  productId      Int
+  product        Product              @relation("KitProduct", fields: [productId], references: [id])
   presentationId Int?
-  presentation  ProductPresentation? @relation(fields: [presentationId], references: [id])
-  quantity      Float   @default(1)
-  displayOrder  Int     @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  presentation   ProductPresentation? @relation(fields: [presentationId], references: [id])
+  quantity       Float                @default(1)
+  displayOrder   Int                  @default(0)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
   @@unique([kitId, productId, presentationId])
   @@index([kitId])
@@ -185,14 +185,14 @@ model User {
   email     String   @unique
   name      String
   phone     String?
-  password  String   // Hash de la contraseña
+  password  String // Hash de la contraseña
   role      UserRole @default(CLIENTE)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relaciones
-  orders            Order[]
+  orders              Order[]
   cashExpressRequests CashExpressRequest[]
 
   @@index([email])
@@ -213,19 +213,19 @@ enum OrderStatus {
 }
 
 model Order {
-  id          Int       @id @default(autoincrement())
-  folio       String?   @unique
-  total       Float
-  status      OrderStatus @default(PENDIENTE)
-  notes       String?
-  userId      Int
-  user        User      @relation(fields: [userId], references: [id])
-  branchId    Int?
-  branch      Branch?   @relation(fields: [branchId], references: [id])
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        Int         @id @default(autoincrement())
+  folio     String?     @unique
+  total     Float
+  status    OrderStatus @default(PENDIENTE)
+  notes     String?
+  userId    Int
+  user      User        @relation(fields: [userId], references: [id])
+  branchId  Int?
+  branch    Branch?     @relation(fields: [branchId], references: [id])
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
-  items       OrderItem[]
+  items OrderItem[]
 
   @@index([userId])
   @@index([branchId])
@@ -259,36 +259,55 @@ enum CashExpressStatus {
   CANCELADO
 }
 
+model CashExpressConfig {
+  id                   Int     @id @default(autoincrement())
+  // Días de servicio (JSON array: [1,2,3,4,5] = lunes a viernes)
+  serviceDays          String  @default("[1,2,3,4,5]") // 0=domingo, 1=lunes, ..., 6=sábado
+  // Horario de inicio (formato: "09:00")
+  startTime            String  @default("09:00")
+  // Horario de fin (formato: "20:00")
+  endTime              String  @default("20:00")
+  // Días festivos (JSON array de fechas: ["2024-12-25", "2025-01-01"])
+  holidays             String  @default("[]")
+  // Mensaje personalizado para días no laborables
+  nonWorkingDayMessage String? @default("Tu solicitud será procesada el próximo día hábil.")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("cash_express_config")
+}
+
 model CashExpressRequest {
-  id              Int                @id @default(autoincrement())
-  folio           String?            @unique
-  amount          Float              // Monto a enviar
-  commission      Float              @default(65) // Comisión
-  totalToDeposit  Float              // Total a depositar (amount + commission)
-  
+  id             Int     @id @default(autoincrement())
+  folio          String? @unique
+  amount         Float // Monto a enviar
+  commission     Float   @default(65) // Comisión
+  totalToDeposit Float // Total a depositar (amount + commission)
+
   // Datos del remitente
-  senderName      String
-  senderPhone     String
-  
+  senderName  String
+  senderPhone String
+
   // Datos del destinatario
-  recipientName   String
-  recipientPhone  String
-  relationship    String
-  
-  status          CashExpressStatus  @default(PENDIENTE)
-  rejectionReason String?           // Motivo de rechazo si fue rebotada
-  depositReceipt  String?            // URL o base64 del comprobante de depósito
-  receiptSentAt   DateTime?          // Fecha de envío del comprobante a revisión
-  depositValidatedAt DateTime?       // Fecha de validación del depósito
-  availableFrom   DateTime?          // Fecha/hora desde la cual está disponible para recoger
-  deliveredAt     DateTime?
-  signedReceipt   String?             // URL del comprobante firmado por el cliente
-  
-  userId          Int
-  user            User               @relation(fields: [userId], references: [id])
-  
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  recipientName  String
+  recipientPhone String
+  relationship   String
+
+  status             CashExpressStatus @default(PENDIENTE)
+  rejectionReason    String? // Motivo de rechazo si fue rebotada
+  depositReceipt     String? // URL o base64 del comprobante de depósito
+  receiptSentAt      DateTime? // Fecha de envío del comprobante a revisión
+  depositValidatedAt DateTime? // Fecha de validación del depósito
+  availableFrom      DateTime? // Fecha/hora desde la cual está disponible para recoger
+  deliveredAt        DateTime?
+  signedReceipt      String? // URL del comprobante firmado por el cliente
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([status])

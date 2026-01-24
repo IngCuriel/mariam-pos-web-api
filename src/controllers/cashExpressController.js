@@ -398,10 +398,134 @@ export const confirmDepositReceipt = async (req, res) => {
       message: 'Comprobante enviado a revisión exitosamente',
       request: updatedRequest
     });
-  } catch (error) {
+    } catch (error) {
     console.error('Error confirmando comprobante:', error);
     res.status(500).json({
       error: 'Error al confirmar comprobante'
+    });
+  }
+};
+
+// Obtener configuración de Efectivo Express
+export const getConfig = async (req, res) => {
+  try {
+    let config = await prisma.cashExpressConfig.findFirst();
+
+    // Si no existe configuración, crear una por defecto
+    if (!config) {
+      config = await prisma.cashExpressConfig.create({
+        data: {
+          serviceDays: '[1,2,3,4,5]', // Lunes a viernes
+          startTime: '09:00',
+          endTime: '20:00',
+          holidays: '[]',
+          nonWorkingDayMessage: 'Tu solicitud será procesada el próximo día hábil.',
+        },
+      });
+    }
+
+    res.json({
+      id: config.id,
+      serviceDays: JSON.parse(config.serviceDays),
+      startTime: config.startTime,
+      endTime: config.endTime,
+      holidays: JSON.parse(config.holidays),
+      nonWorkingDayMessage: config.nonWorkingDayMessage,
+    });
+  } catch (error) {
+    console.error('Error obteniendo configuración:', error);
+    res.status(500).json({
+      error: 'Error al obtener configuración',
+    });
+  }
+};
+
+// Actualizar configuración de Efectivo Express
+export const updateConfig = async (req, res) => {
+  try {
+    const { serviceDays, startTime, endTime, holidays, nonWorkingDayMessage } = req.body;
+
+    // Validaciones
+    if (!Array.isArray(serviceDays) || serviceDays.length === 0) {
+      return res.status(400).json({
+        error: 'Debe seleccionar al menos un día de servicio',
+      });
+    }
+
+    if (!startTime || !endTime) {
+      return res.status(400).json({
+        error: 'Debe especificar horario de inicio y fin',
+      });
+    }
+
+    // Validar formato de hora (HH:MM)
+    const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timeRegex.test(startTime) || !timeRegex.test(endTime)) {
+      return res.status(400).json({
+        error: 'Formato de hora inválido. Use HH:MM (24 horas)',
+      });
+    }
+
+    // Validar que startTime < endTime
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const [endHour, endMin] = endTime.split(':').map(Number);
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+
+    if (startMinutes >= endMinutes) {
+      return res.status(400).json({
+        error: 'El horario de inicio debe ser anterior al horario de fin',
+      });
+    }
+
+    // Validar holidays si se proporciona
+    if (holidays && !Array.isArray(holidays)) {
+      return res.status(400).json({
+        error: 'Los días festivos deben ser un array',
+      });
+    }
+
+    // Obtener o crear configuración
+    let config = await prisma.cashExpressConfig.findFirst();
+
+    if (!config) {
+      config = await prisma.cashExpressConfig.create({
+        data: {
+          serviceDays: JSON.stringify(serviceDays),
+          startTime,
+          endTime,
+          holidays: JSON.stringify(holidays || []),
+          nonWorkingDayMessage: nonWorkingDayMessage || 'Tu solicitud será procesada el próximo día hábil.',
+        },
+      });
+    } else {
+      config = await prisma.cashExpressConfig.update({
+        where: { id: config.id },
+        data: {
+          serviceDays: JSON.stringify(serviceDays),
+          startTime,
+          endTime,
+          holidays: JSON.stringify(holidays || []),
+          nonWorkingDayMessage: nonWorkingDayMessage || 'Tu solicitud será procesada el próximo día hábil.',
+        },
+      });
+    }
+
+    res.json({
+      message: 'Configuración actualizada exitosamente',
+      config: {
+        id: config.id,
+        serviceDays: JSON.parse(config.serviceDays),
+        startTime: config.startTime,
+        endTime: config.endTime,
+        holidays: JSON.parse(config.holidays),
+        nonWorkingDayMessage: config.nonWorkingDayMessage,
+      },
+    });
+  } catch (error) {
+    console.error('Error actualizando configuración:', error);
+    res.status(500).json({
+      error: 'Error al actualizar configuración',
     });
   }
 };
