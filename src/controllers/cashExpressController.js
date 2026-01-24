@@ -517,6 +517,17 @@ export const getConfig = async (req, res) => {
       });
     }
 
+    // Obtener cuentas bancarias activas
+    const bankAccounts = await prisma.cashExpressBankAccount.findMany({
+      where: {
+        cashExpressConfigId: config.id,
+        isActive: true,
+      },
+      orderBy: {
+        displayOrder: 'asc',
+      },
+    });
+
     res.json({
       id: config.id,
       serviceDays: JSON.parse(config.serviceDays),
@@ -526,6 +537,16 @@ export const getConfig = async (req, res) => {
       nonWorkingDayMessage: config.nonWorkingDayMessage,
       availableBalance: config.availableBalance || 0,
       dailyMinimumDeposit: config.dailyMinimumDeposit || 500,
+      bankAccounts: bankAccounts.map(account => ({
+        id: account.id,
+        beneficiaryName: account.beneficiaryName,
+        accountNumber: account.accountNumber,
+        clabe: account.clabe,
+        concept: account.concept,
+        bankName: account.bankName,
+        displayOrder: account.displayOrder,
+        isActive: account.isActive,
+      })),
     });
   } catch (error) {
     console.error('Error obteniendo configuración:', error);
@@ -878,6 +899,178 @@ export const getCurrentBalance = async (req, res) => {
     console.error('Error obteniendo saldo:', error);
     res.status(500).json({
       error: 'Error al obtener saldo',
+    });
+  }
+};
+
+// Obtener cuentas bancarias activas (público, para mostrar al cliente)
+export const getBankAccounts = async (req, res) => {
+  try {
+    const config = await prisma.cashExpressConfig.findFirst();
+    
+    if (!config) {
+      return res.json([]);
+    }
+
+    const bankAccounts = await prisma.cashExpressBankAccount.findMany({
+      where: {
+        cashExpressConfigId: config.id,
+        isActive: true,
+      },
+      orderBy: {
+        displayOrder: 'asc',
+      },
+    });
+
+    res.json(bankAccounts.map(account => ({
+      id: account.id,
+      beneficiaryName: account.beneficiaryName,
+      accountNumber: account.accountNumber,
+      clabe: account.clabe,
+      concept: account.concept,
+      bankName: account.bankName,
+    })));
+  } catch (error) {
+    console.error('Error obteniendo cuentas bancarias:', error);
+    res.status(500).json({
+      error: 'Error al obtener cuentas bancarias',
+    });
+  }
+};
+
+// Crear cuenta bancaria (solo admin)
+export const createBankAccount = async (req, res) => {
+  try {
+    const { beneficiaryName, accountNumber, clabe, concept, bankName, displayOrder } = req.body;
+
+    if (!beneficiaryName || !accountNumber) {
+      return res.status(400).json({
+        error: 'El nombre del beneficiario y el número de cuenta son obligatorios',
+      });
+    }
+
+    // Obtener configuración
+    let config = await prisma.cashExpressConfig.findFirst();
+    if (!config) {
+      return res.status(404).json({
+        error: 'Configuración no encontrada',
+      });
+    }
+
+    // Obtener el máximo displayOrder para ponerlo al final
+    const maxOrder = await prisma.cashExpressBankAccount.findFirst({
+      where: { cashExpressConfigId: config.id },
+      orderBy: { displayOrder: 'desc' },
+      select: { displayOrder: true },
+    });
+
+    const newAccount = await prisma.cashExpressBankAccount.create({
+      data: {
+        beneficiaryName: beneficiaryName.trim(),
+        accountNumber: accountNumber.trim(),
+        clabe: clabe ? clabe.trim() : null,
+        concept: concept ? concept.trim() : null,
+        bankName: bankName ? bankName.trim() : null,
+        displayOrder: displayOrder !== undefined ? displayOrder : (maxOrder?.displayOrder || 0) + 1,
+        cashExpressConfigId: config.id,
+      },
+    });
+
+    res.status(201).json({
+      id: newAccount.id,
+      beneficiaryName: newAccount.beneficiaryName,
+      accountNumber: newAccount.accountNumber,
+      clabe: newAccount.clabe,
+      concept: newAccount.concept,
+      bankName: newAccount.bankName,
+      displayOrder: newAccount.displayOrder,
+      isActive: newAccount.isActive,
+    });
+  } catch (error) {
+    console.error('Error creando cuenta bancaria:', error);
+    res.status(500).json({
+      error: 'Error al crear cuenta bancaria',
+    });
+  }
+};
+
+// Actualizar cuenta bancaria (solo admin)
+export const updateBankAccount = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { beneficiaryName, accountNumber, clabe, concept, bankName, displayOrder, isActive } = req.body;
+
+    if (!beneficiaryName || !accountNumber) {
+      return res.status(400).json({
+        error: 'El nombre del beneficiario y el número de cuenta son obligatorios',
+      });
+    }
+
+    const account = await prisma.cashExpressBankAccount.findUnique({
+      where: { id: parseInt(id) },
+    });
+
+    if (!account) {
+      return res.status(404).json({
+        error: 'Cuenta bancaria no encontrada',
+      });
+    }
+
+    const updatedAccount = await prisma.cashExpressBankAccount.update({
+      where: { id: parseInt(id) },
+      data: {
+        beneficiaryName: beneficiaryName.trim(),
+        accountNumber: accountNumber.trim(),
+        clabe: clabe !== undefined ? (clabe ? clabe.trim() : null) : account.clabe,
+        concept: concept !== undefined ? (concept ? concept.trim() : null) : account.concept,
+        bankName: bankName !== undefined ? (bankName ? bankName.trim() : null) : account.bankName,
+        displayOrder: displayOrder !== undefined ? displayOrder : account.displayOrder,
+        isActive: isActive !== undefined ? isActive : account.isActive,
+      },
+    });
+
+    res.json({
+      id: updatedAccount.id,
+      beneficiaryName: updatedAccount.beneficiaryName,
+      accountNumber: updatedAccount.accountNumber,
+      clabe: updatedAccount.clabe,
+      concept: updatedAccount.concept,
+      bankName: updatedAccount.bankName,
+      displayOrder: updatedAccount.displayOrder,
+      isActive: updatedAccount.isActive,
+    });
+  } catch (error) {
+    console.error('Error actualizando cuenta bancaria:', error);
+    res.status(500).json({
+      error: 'Error al actualizar cuenta bancaria',
+    });
+  }
+};
+
+// Eliminar cuenta bancaria (solo admin)
+export const deleteBankAccount = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const account = await prisma.cashExpressBankAccount.findUnique({
+      where: { id: parseInt(id) },
+    });
+
+    if (!account) {
+      return res.status(404).json({
+        error: 'Cuenta bancaria no encontrada',
+      });
+    }
+
+    await prisma.cashExpressBankAccount.delete({
+      where: { id: parseInt(id) },
+    });
+
+    res.json({ message: 'Cuenta bancaria eliminada exitosamente' });
+  } catch (error) {
+    console.error('Error eliminando cuenta bancaria:', error);
+    res.status(500).json({
+      error: 'Error al eliminar cuenta bancaria',
     });
   }
 };

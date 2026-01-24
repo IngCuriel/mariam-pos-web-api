@@ -14,6 +14,10 @@ import {
   addBalance,
   getBalanceHistory,
   getCurrentBalance,
+  getBankAccounts,
+  createBankAccount,
+  updateBankAccount,
+  deleteBankAccount,
 } from '../controllers/cashExpressController.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 
@@ -22,6 +26,7 @@ const router = express.Router();
 // Rutas públicas (no requieren autenticación)
 router.get('/availability/suggested', getSuggestedAvailability);
 router.get('/balance/current', getCurrentBalance);
+router.get('/bank-accounts', getBankAccounts);
 
 // Todas las demás rutas requieren autenticación
 router.use(authenticate);
@@ -43,6 +48,11 @@ router.put('/config/update', requireAdmin, updateConfig);
 // Rutas de saldo (solo admin)
 router.post('/balance/add', requireAdmin, addBalance);
 router.get('/balance/history', requireAdmin, getBalanceHistory);
+
+// Rutas de cuentas bancarias (solo admin)
+router.post('/bank-accounts', requireAdmin, createBankAccount);
+router.put('/bank-accounts/:id', requireAdmin, updateBankAccount);
+router.delete('/bank-accounts/:id', requireAdmin, deleteBankAccount);
 
 // Rutas solo para admin
 router.patch('/:id/status', requireAdmin, updateRequestStatus);

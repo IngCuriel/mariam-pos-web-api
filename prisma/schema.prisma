@@ -282,6 +282,8 @@ model CashExpressConfig {
 
   // Relación con historial de abonos
   balanceHistory CashExpressBalanceHistory[]
+  // Relación con cuentas bancarias
+  bankAccounts CashExpressBankAccount[]
 
   @@map("cash_express_config")
 }
@@ -301,6 +303,35 @@ model CashExpressBalanceHistory {
 
   @@index([createdAt])
   @@map("cash_express_balance_history")
+}
+
+model CashExpressBankAccount {
+  id                   Int     @id @default(autoincrement())
+  // Nombre del beneficiario
+  beneficiaryName      String
+  // Número de cuenta
+  accountNumber        String
+  // CLABE (opcional)
+  clabe                String?
+  // Concepto o referencia para el depósito
+  concept              String?
+  // Banco o institución financiera
+  bankName             String?
+  // Orden de visualización
+  displayOrder         Int     @default(0)
+  // Si está activa
+  isActive             Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relación con configuración
+  cashExpressConfigId Int
+  CashExpressConfig   CashExpressConfig @relation(fields: [cashExpressConfigId], references: [id])
+
+  @@index([cashExpressConfigId])
+  @@index([isActive])
+  @@map("cash_express_bank_accounts")
 }
 
 model CashExpressRequest {
