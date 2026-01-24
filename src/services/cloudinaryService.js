@@ -61,19 +61,44 @@ export const generateUploadSignature = (params = {}) => {
     paramsToSign.resource_type = defaultParams.resource_type;
   }
 
+  // Verificar que api_key esté presente (crítico para la firma)
+  if (!paramsToSign.api_key) {
+    throw new Error('api_key es requerido para generar la firma de Cloudinary');
+  }
+
   // Ordenar parámetros alfabéticamente (requerido por Cloudinary)
   const sortedKeys = Object.keys(paramsToSign).sort();
   const sortedParams = sortedKeys
     .map(key => `${key}=${String(paramsToSign[key])}`)
     .join('&');
 
-  // Debug: mostrar string que se está firmando (solo en desarrollo)
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('🔐 Cloudinary signature string:', sortedParams);
-    console.log('🔐 Parámetros en la firma (ordenados):', sortedKeys);
-    console.log('🔐 Valores:', sortedKeys.map(k => `${k}=${paramsToSign[k]}`));
-    console.log('🔐 Cloudinary signature string with secret:', sortedParams + apiSecret.substring(0, 10) + '...');
-  }
+  // LOGS DETALLADOS PARA DEBUGGING
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('🔐 GENERANDO FIRMA DE CLOUDINARY');
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('📋 Variables de entorno:');
+  console.log('   - CLOUDINARY_CLOUD_NAME:', cloudName ? `${cloudName.substring(0, 5)}...` : '❌ NO CONFIGURADO');
+  console.log('   - CLOUDINARY_API_KEY:', apiKey ? `${apiKey.substring(0, 5)}...${apiKey.substring(apiKey.length - 5)}` : '❌ NO CONFIGURADO');
+  console.log('   - CLOUDINARY_API_SECRET:', apiSecret ? `${apiSecret.substring(0, 5)}...${apiSecret.substring(apiSecret.length - 5)}` : '❌ NO CONFIGURADO');
+  console.log('');
+  console.log('📋 Parámetros por defecto:');
+  console.log(JSON.stringify(defaultParams, null, 2));
+  console.log('');
+  console.log('📋 Parámetros que se incluirán en la firma (paramsToSign):');
+  console.log(JSON.stringify(paramsToSign, null, 2));
+  console.log('');
+  console.log('📋 Parámetros ordenados alfabéticamente:');
+  console.log('   Orden:', sortedKeys.join(', '));
+  console.log('');
+  console.log('🔐 STRING QUE SE FIRMA (sortedParams):');
+  console.log('   "' + sortedParams + '"');
+  console.log('');
+  console.log('🔐 Verificación api_key en firma:', sortedParams.includes('api_key=') ? '✅ SÍ' : '❌ NO');
+  console.log('');
+  console.log('🔐 String completo a firmar (con secret):');
+  console.log('   "' + sortedParams + apiSecret + '"');
+  console.log('   (Longitud del secret: ' + apiSecret.length + ' caracteres)');
+  console.log('');
 
   // Generar signature usando SHA1
   // IMPORTANTE: El string debe ser: sortedParams + apiSecret (sin & entre ellos)
@@ -81,6 +106,11 @@ export const generateUploadSignature = (params = {}) => {
     .createHash('sha1')
     .update(sortedParams + apiSecret)
     .digest('hex');
+
+  console.log('🔐 FIRMA GENERADA (SHA1):');
+  console.log('   ' + signature);
+  console.log('   (Longitud: ' + signature.length + ' caracteres)');
+  console.log('');
 
   // Retornar datos de firma
   // Nota: resource_type se incluye en la respuesta para el frontend,
@@ -94,11 +124,30 @@ export const generateUploadSignature = (params = {}) => {
     resource_type: defaultParams.resource_type,
   };
   
-  // Debug: mostrar qué parámetros se están firmando
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('🔐 Parámetros en la firma:', Object.keys(paramsToSign).sort());
-    console.log('🔐 Parámetros retornados al frontend:', Object.keys(response).filter(k => k !== 'signature'));
+  console.log('📤 RESPUESTA QUE SE ENVIARÁ AL FRONTEND:');
+  console.log(JSON.stringify({
+    signature: signature.substring(0, 20) + '...' + signature.substring(signature.length - 10),
+    timestamp: response.timestamp,
+    cloud_name: response.cloud_name,
+    api_key: response.api_key,
+    folder: response.folder,
+    resource_type: response.resource_type,
+  }, null, 2));
+  console.log('');
+  console.log('📋 PARÁMETROS QUE EL FRONTEND DEBE ENVIAR A CLOUDINARY:');
+  console.log('   1. api_key: ' + apiKey);
+  console.log('   2. folder: ' + defaultParams.folder);
+  console.log('   3. signature: ' + signature.substring(0, 20) + '...');
+  console.log('   4. timestamp: ' + timestamp);
+  if (defaultParams.resource_type && defaultParams.resource_type !== 'image') {
+    console.log('   5. resource_type: ' + defaultParams.resource_type);
   }
+  console.log('   6. file: [archivo de imagen]');
+  console.log('');
+  console.log('🔍 STRING QUE CLOUDINARY ESPERA EN LA FIRMA:');
+  console.log('   "' + sortedParams + '"');
+  console.log('   (Debe coincidir EXACTAMENTE con los parámetros enviados en el FormData)');
+  console.log('═══════════════════════════════════════════════════════════\n');
   
   return response;
 };
