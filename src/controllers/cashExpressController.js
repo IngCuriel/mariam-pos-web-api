@@ -253,20 +253,20 @@ export const updateRequestStatus = async (req, res) => {
       });
     }
 
+    // Obtener la solicitud actual una sola vez
+    const currentRequest = await prisma.cashExpressRequest.findUnique({
+      where: { id: parseInt(id) }
+    });
+
+    if (!currentRequest) {
+      return res.status(404).json({
+        error: 'Solicitud no encontrada'
+      });
+    }
+
     // Si se valida el depósito, usar fecha estimada como default si no se proporciona availableFrom
     let finalAvailableFrom = availableFrom;
     if (status === 'DEPOSITO_VALIDADO') {
-      // Obtener la solicitud para acceder a estimatedDeliveryDate
-      const currentRequest = await prisma.cashExpressRequest.findUnique({
-        where: { id: parseInt(id) }
-      });
-
-      if (!currentRequest) {
-        return res.status(404).json({
-          error: 'Solicitud no encontrada'
-        });
-      }
-
       // Si no se proporciona availableFrom, usar estimatedDeliveryDate como default
       if (!availableFrom && currentRequest.estimatedDeliveryDate) {
         finalAvailableFrom = currentRequest.estimatedDeliveryDate.toISOString();
@@ -274,6 +274,49 @@ export const updateRequestStatus = async (req, res) => {
         // Si no hay fecha estimada ni disponible, usar fecha actual
         finalAvailableFrom = new Date().toISOString();
       }
+    }
+
+    // Si se está marcando como ENTREGADO, descontar del saldo
+    if (status === 'ENTREGADO' && currentRequest.status !== 'ENTREGADO') {
+      // Obtener configuración para actualizar el saldo
+      let config = await prisma.cashExpressConfig.findFirst();
+      if (!config) {
+        return res.status(500).json({
+          error: 'Configuración de Efectivo Express no encontrada'
+        });
+      }
+
+      const amountToDeduct = currentRequest.amount; // Monto a entregar (sin comisión)
+      const previousBalance = config.availableBalance;
+      const newBalance = previousBalance - amountToDeduct;
+
+      // Verificar que haya saldo suficiente
+      if (newBalance < 0) {
+        return res.status(400).json({
+          error: `Saldo insuficiente. Saldo actual: ${previousBalance.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}, Monto a entregar: ${amountToDeduct.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}`
+        });
+      }
+
+      // Actualizar saldo en configuración
+      config = await prisma.cashExpressConfig.update({
+        where: { id: config.id },
+        data: {
+          availableBalance: newBalance
+        }
+      });
+
+      // Registrar retiro en historial
+      await prisma.cashExpressBalanceHistory.create({
+        data: {
+          amount: -amountToDeduct, // Negativo porque es un retiro
+          description: `Entrega de efectivo - Solicitud ${currentRequest.folio}`,
+          previousBalance,
+          newBalance,
+          userId: req.userId, // Admin que marca como entregado
+          cashExpressConfigId: config.id,
+          cashExpressRequestId: parseInt(id) // Ligar con la solicitud
+        }
+      });
     }
 
     const updateData = {
@@ -908,7 +951,17 @@ export const getBalanceHistory = async (req, res) => {
   try {
     const { limit = 50, offset = 0 } = req.query;
 
+    const config = await prisma.cashExpressConfig.findFirst();
+    if (!config) {
+      return res.status(404).json({
+        error: 'Configuración no encontrada',
+      });
+    }
+
     const history = await prisma.cashExpressBalanceHistory.findMany({
+      where: {
+        cashExpressConfigId: config.id,
+      },
       take: parseInt(limit),
       skip: parseInt(offset),
       orderBy: {
@@ -920,6 +973,20 @@ export const getBalanceHistory = async (req, res) => {
             id: true,
             name: true,
             email: true,
+          },
+        },
+        cashExpressRequest: {
+          select: {
+            id: true,
+            folio: true,
+            amount: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
           },
         },
       },

@@ -305,7 +305,12 @@ model CashExpressBalanceHistory {
   CashExpressConfig   CashExpressConfig? @relation(fields: [cashExpressConfigId], references: [id])
   cashExpressConfigId Int?
 
+  // Relación con solicitud (para retiros por entrega)
+  cashExpressRequestId Int?
+  cashExpressRequest   CashExpressRequest? @relation(fields: [cashExpressRequestId], references: [id])
+
   @@index([createdAt])
+  @@index([cashExpressRequestId])
   @@map("cash_express_balance_history")
 }
 
@@ -369,6 +374,9 @@ model CashExpressRequest {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Relación con historial de balance (para retiros por entrega)
+  balanceHistory CashExpressBalanceHistory[]
 
   @@index([userId])
   @@index([status])
