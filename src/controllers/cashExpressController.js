@@ -668,6 +668,7 @@ export const addBalance = async (req, res) => {
         previousBalance,
         newBalance,
         userId,
+        cashExpressConfigId: config.id,
       },
     });
 
