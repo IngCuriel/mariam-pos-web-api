@@ -382,10 +382,12 @@ export const updateRecipientData = async (req, res) => {
       });
     }
 
-    // Solo permitir actualizar cuando el depósito está validado
-    if (request.status !== 'DEPOSITO_VALIDADO') {
+    // Permitir actualizar cuando el depósito está validado, pendiente o rebotado
+    // Esto permite que el cliente complete los datos antes de enviar el comprobante
+    const allowedStatuses = ['PENDIENTE', 'REBOTADO', 'DEPOSITO_VALIDADO'];
+    if (!allowedStatuses.includes(request.status)) {
       return res.status(400).json({
-        error: 'Solo se pueden actualizar los datos cuando el depósito está validado'
+        error: 'Solo se pueden actualizar los datos cuando la solicitud está pendiente, rebotada o validada'
       });
     }
 
