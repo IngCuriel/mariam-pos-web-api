@@ -60,8 +60,8 @@ export const createRequest = async (req, res) => {
     // Los datos del remitente y destinatario son opcionales al crear la solicitud
     // Se pedirán después de que el admin valide el depósito
 
-    // Calcular comisión como porcentaje
-    const commission = Math.round((amount * commissionPercentage) / 100 * 100) / 100; // Redondear a 2 decimales
+    // Calcular comisión como porcentaje (redondear siempre hacia arriba a 2 decimales)
+    const commission = Math.ceil((amount * commissionPercentage) / 100 * 100) / 100;
     const totalToDeposit = amount + commission;
 
     // Calcular fecha estimada de entrega
