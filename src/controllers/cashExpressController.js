@@ -145,6 +145,64 @@ export const getRequestById = async (req, res) => {
 };
 
 // Actualizar estado de solicitud (solo admin)
+export const uploadSignedReceipt = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { signedReceipt } = req.body; // URL de Cloudinary
+
+    if (!signedReceipt) {
+      return res.status(400).json({
+        error: 'Se requiere el comprobante firmado'
+      });
+    }
+
+    // Verificar que la solicitud existe
+    const request = await prisma.cashExpressRequest.findUnique({
+      where: { id: parseInt(id) }
+    });
+
+    if (!request) {
+      return res.status(404).json({
+        error: 'Solicitud no encontrada'
+      });
+    }
+
+    // Solo permitir subir comprobante firmado cuando el estado es DEPOSITO_VALIDADO
+    if (request.status !== 'DEPOSITO_VALIDADO') {
+      return res.status(400).json({
+        error: 'Solo se puede subir comprobante firmado cuando el depósito está validado'
+      });
+    }
+
+    // Actualizar el comprobante firmado
+    const updatedRequest = await prisma.cashExpressRequest.update({
+      where: { id: parseInt(id) },
+      data: {
+        signedReceipt
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    return res.json({
+      message: 'Comprobante firmado subido correctamente',
+      request: updatedRequest
+    });
+  } catch (error) {
+    console.error('Error subiendo comprobante firmado:', error);
+    return res.status(500).json({
+      error: 'Error al subir el comprobante firmado'
+    });
+  }
+};
+
 export const updateRequestStatus = async (req, res) => {
   try {
     const { id } = req.params;

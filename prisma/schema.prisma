@@ -282,6 +282,7 @@ model CashExpressRequest {
   depositValidatedAt DateTime?       // Fecha de validación del depósito
   availableFrom   DateTime?          // Fecha/hora desde la cual está disponible para recoger
   deliveredAt     DateTime?
+  signedReceipt   String?             // URL del comprobante firmado por el cliente
   
   userId          Int
   user            User               @relation(fields: [userId], references: [id])

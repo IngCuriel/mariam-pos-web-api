@@ -5,7 +5,8 @@ import {
   getRequestById,
   updateRequestStatus,
   uploadDepositReceipt,
-  confirmDepositReceipt
+  confirmDepositReceipt,
+  uploadSignedReceipt
 } from '../controllers/cashExpressController.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 
@@ -25,6 +26,7 @@ router.post('/:id/receipt/confirm', confirmDepositReceipt);
 
 // Rutas solo para admin
 router.patch('/:id/status', requireAdmin, updateRequestStatus);
+router.patch('/:id/signed-receipt', requireAdmin, uploadSignedReceipt);
 
 export default router;
 
