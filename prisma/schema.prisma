@@ -324,6 +324,7 @@ model CashExpressRequest {
   depositReceipt     String? // URL o base64 del comprobante de depósito
   receiptSentAt      DateTime? // Fecha de envío del comprobante a revisión
   depositValidatedAt DateTime? // Fecha de validación del depósito
+  estimatedDeliveryDate DateTime? // Fecha estimada de entrega calculada al crear la solicitud
   availableFrom      DateTime? // Fecha/hora desde la cual está disponible para recoger
   deliveredAt        DateTime?
   signedReceipt      String? // URL del comprobante firmado por el cliente

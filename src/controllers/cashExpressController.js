@@ -35,6 +35,10 @@ export const createRequest = async (req, res) => {
     const commission = 65;
     const totalToDeposit = amount + commission;
 
+    // Calcular fecha estimada de entrega
+    const availabilityResult = await calculateAvailabilityDate(parseFloat(amount));
+    const estimatedDeliveryDate = availabilityResult ? availabilityResult.date : null;
+
     // Crear solicitud (solo con el monto)
     const request = await prisma.cashExpressRequest.create({
       data: {
@@ -48,7 +52,8 @@ export const createRequest = async (req, res) => {
         recipientPhone: recipientPhone || null,
         relationship: relationship || null,
         userId,
-        status: 'PENDIENTE'
+        status: 'PENDIENTE',
+        estimatedDeliveryDate: estimatedDeliveryDate
       }
     });
 
@@ -219,11 +224,27 @@ export const updateRequestStatus = async (req, res) => {
       });
     }
 
-    // Si se valida el depósito, se requiere fecha de disponibilidad
-    if (status === 'DEPOSITO_VALIDADO' && !availableFrom) {
-      return res.status(400).json({
-        error: 'Se requiere la fecha y hora de disponibilidad para recoger'
+    // Si se valida el depósito, usar fecha estimada como default si no se proporciona availableFrom
+    let finalAvailableFrom = availableFrom;
+    if (status === 'DEPOSITO_VALIDADO') {
+      // Obtener la solicitud para acceder a estimatedDeliveryDate
+      const currentRequest = await prisma.cashExpressRequest.findUnique({
+        where: { id: parseInt(id) }
       });
+
+      if (!currentRequest) {
+        return res.status(404).json({
+          error: 'Solicitud no encontrada'
+        });
+      }
+
+      // Si no se proporciona availableFrom, usar estimatedDeliveryDate como default
+      if (!availableFrom && currentRequest.estimatedDeliveryDate) {
+        finalAvailableFrom = currentRequest.estimatedDeliveryDate.toISOString();
+      } else if (!availableFrom) {
+        // Si no hay fecha estimada ni disponible, usar fecha actual
+        finalAvailableFrom = new Date().toISOString();
+      }
     }
 
     const updateData = {
@@ -234,8 +255,8 @@ export const updateRequestStatus = async (req, res) => {
       }),
       ...(status === 'DEPOSITO_VALIDADO' && { 
         depositValidatedAt: new Date(),
-        // Fecha de disponibilidad es requerida
-        availableFrom: new Date(availableFrom)
+        // Usar fecha proporcionada o la fecha estimada como default
+        availableFrom: new Date(finalAvailableFrom)
       }),
       ...(status === 'ENTREGADO' && { deliveredAt: new Date() })
     };
