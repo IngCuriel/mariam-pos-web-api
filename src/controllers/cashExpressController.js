@@ -241,9 +241,11 @@ export const uploadDepositReceipt = async (req, res) => {
       });
     }
 
-    if (request.status !== 'PENDIENTE' && request.status !== 'REBOTADO' && request.status !== 'EN_ESPERA_CONFIRMACION') {
+    // Solo permitir subir/reemplazar comprobante en estados PENDIENTE o REBOTADO
+    // Cuando está EN_ESPERA_CONFIRMACION, el admin está revisando, no se puede modificar
+    if (request.status !== 'PENDIENTE' && request.status !== 'REBOTADO') {
       return res.status(400).json({
-        error: 'Solo se puede subir comprobante en solicitudes pendientes, en espera de confirmación o rebotadas'
+        error: 'Solo se puede subir o reemplazar comprobante en solicitudes pendientes o rechazadas. Si tu comprobante está en revisión, espera la respuesta del administrador.'
       });
     }
 
