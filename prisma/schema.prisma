@@ -276,6 +276,10 @@ model CashExpressConfig {
   availableBalance     Float   @default(0)
   // Abono mínimo diario (por defecto $500)
   dailyMinimumDeposit  Float   @default(500)
+  // Monto máximo de depósito a enviar
+  maxAmount            Float   @default(1000)
+  // Porcentaje de comisión (por defecto 6.5%)
+  commissionPercentage Float   @default(6.5)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

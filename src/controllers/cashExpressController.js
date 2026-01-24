@@ -22,17 +22,46 @@ export const createRequest = async (req, res) => {
       relationship
     } = req.body;
 
+    // Obtener configuración para validar monto máximo y calcular comisión
+    let config = await prisma.cashExpressConfig.findFirst();
+    if (!config) {
+      // Crear configuración por defecto si no existe
+      config = await prisma.cashExpressConfig.create({
+        data: {
+          serviceDays: '[1,2,3,4,5]',
+          startTime: '09:00',
+          endTime: '20:00',
+          holidays: '[]',
+          nonWorkingDayMessage: 'Tu solicitud será procesada el próximo día hábil.',
+          availableBalance: 0,
+          dailyMinimumDeposit: 500,
+          maxAmount: 1000,
+          commissionPercentage: 6.5,
+        },
+      });
+    }
+
+    const maxAmount = config.maxAmount || 1000;
+    const commissionPercentage = config.commissionPercentage || 6.5;
+
     // Validaciones
-    if (!amount || amount <= 0 || amount > 1000) {
+    if (!amount || amount <= 0) {
       return res.status(400).json({
-        error: 'El monto debe estar entre $1 y $1,000'
+        error: 'El monto debe ser mayor a $0'
+      });
+    }
+
+    if (amount > maxAmount) {
+      return res.status(400).json({
+        error: `El monto máximo permitido es ${maxAmount.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}`
       });
     }
 
     // Los datos del remitente y destinatario son opcionales al crear la solicitud
     // Se pedirán después de que el admin valide el depósito
 
-    const commission = 65;
+    // Calcular comisión como porcentaje
+    const commission = Math.round((amount * commissionPercentage) / 100 * 100) / 100; // Redondear a 2 decimales
     const totalToDeposit = amount + commission;
 
     // Calcular fecha estimada de entrega
@@ -513,6 +542,8 @@ export const getConfig = async (req, res) => {
           nonWorkingDayMessage: 'Tu solicitud será procesada el próximo día hábil.',
           availableBalance: 0,
           dailyMinimumDeposit: 500,
+          maxAmount: 1000,
+          commissionPercentage: 6.5,
         },
       });
     }
@@ -537,6 +568,8 @@ export const getConfig = async (req, res) => {
       nonWorkingDayMessage: config.nonWorkingDayMessage,
       availableBalance: config.availableBalance || 0,
       dailyMinimumDeposit: config.dailyMinimumDeposit || 500,
+      maxAmount: config.maxAmount || 1000,
+      commissionPercentage: config.commissionPercentage || 6.5,
       bankAccounts: bankAccounts.map(account => ({
         id: account.id,
         beneficiaryName: account.beneficiaryName,
@@ -559,7 +592,7 @@ export const getConfig = async (req, res) => {
 // Actualizar configuración de Efectivo Express
 export const updateConfig = async (req, res) => {
   try {
-    const { serviceDays, startTime, endTime, holidays, nonWorkingDayMessage, dailyMinimumDeposit } = req.body;
+    const { serviceDays, startTime, endTime, holidays, nonWorkingDayMessage, dailyMinimumDeposit, maxAmount, commissionPercentage } = req.body;
 
     // Validaciones
     if (!Array.isArray(serviceDays) || serviceDays.length === 0) {
@@ -601,6 +634,20 @@ export const updateConfig = async (req, res) => {
       });
     }
 
+    // Validar maxAmount si se proporciona
+    if (maxAmount !== undefined && (maxAmount <= 0 || maxAmount > 100000)) {
+      return res.status(400).json({
+        error: 'El monto máximo debe estar entre $1 y $100,000',
+      });
+    }
+
+    // Validar commissionPercentage si se proporciona
+    if (commissionPercentage !== undefined && (commissionPercentage < 0 || commissionPercentage > 100)) {
+      return res.status(400).json({
+        error: 'El porcentaje de comisión debe estar entre 0% y 100%',
+      });
+    }
+
     // Obtener o crear configuración
     let config = await prisma.cashExpressConfig.findFirst();
 
@@ -616,16 +663,29 @@ export const updateConfig = async (req, res) => {
         },
       });
     } else {
+      const updateData = {
+        serviceDays: JSON.stringify(serviceDays),
+        startTime,
+        endTime,
+        holidays: JSON.stringify(holidays || []),
+        nonWorkingDayMessage: nonWorkingDayMessage || 'Tu solicitud será procesada el próximo día hábil.',
+      };
+
+      if (dailyMinimumDeposit !== undefined) {
+        updateData.dailyMinimumDeposit = dailyMinimumDeposit;
+      }
+
+      if (maxAmount !== undefined) {
+        updateData.maxAmount = maxAmount;
+      }
+
+      if (commissionPercentage !== undefined) {
+        updateData.commissionPercentage = commissionPercentage;
+      }
+
       config = await prisma.cashExpressConfig.update({
         where: { id: config.id },
-        data: {
-          serviceDays: JSON.stringify(serviceDays),
-          startTime,
-          endTime,
-          holidays: JSON.stringify(holidays || []),
-          nonWorkingDayMessage: nonWorkingDayMessage || 'Tu solicitud será procesada el próximo día hábil.',
-          ...(dailyMinimumDeposit !== undefined && { dailyMinimumDeposit }),
-        },
+        data: updateData,
       });
     }
 
@@ -640,6 +700,8 @@ export const updateConfig = async (req, res) => {
         nonWorkingDayMessage: config.nonWorkingDayMessage,
         availableBalance: config.availableBalance || 0,
         dailyMinimumDeposit: config.dailyMinimumDeposit || 500,
+        maxAmount: config.maxAmount || 1000,
+        commissionPercentage: config.commissionPercentage || 6.5,
       },
     });
   } catch (error) {
