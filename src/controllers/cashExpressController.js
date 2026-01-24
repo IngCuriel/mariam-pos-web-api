@@ -606,7 +606,7 @@ export const updateConfig = async (req, res) => {
   }
 };
 
-// Calcular fecha de disponibilidad basada en saldo
+// Calcular fecha estimada de entrega basada en saldo y solicitudes pendientes
 export const calculateAvailabilityDate = async (amount) => {
   try {
     const config = await prisma.cashExpressConfig.findFirst();
@@ -619,17 +619,40 @@ export const calculateAvailabilityDate = async (amount) => {
     const serviceDays = JSON.parse(config.serviceDays || '[1,2,3,4,5]');
     const holidays = JSON.parse(config.holidays || '[]');
 
-    // Si hay saldo suficiente, está disponible hoy
-    if (availableBalance >= amount) {
-      return new Date();
+    // Contar solicitudes pendientes que están esperando procesamiento
+    const pendingRequests = await prisma.cashExpressRequest.count({
+      where: {
+        status: {
+          in: ['PENDIENTE', 'EN_ESPERA_CONFIRMACION', 'DEPOSITO_VALIDADO']
+        }
+      }
+    });
+
+    // Calcular el monto total de solicitudes pendientes
+    const pendingAmounts = await prisma.cashExpressRequest.findMany({
+      where: {
+        status: {
+          in: ['PENDIENTE', 'EN_ESPERA_CONFIRMACION', 'DEPOSITO_VALIDADO']
+        }
+      },
+      select: {
+        amount: true
+      }
+    });
+
+    const totalPendingAmount = pendingAmounts.reduce((sum, req) => sum + req.amount, 0);
+
+    // Si hay saldo suficiente para cubrir esta solicitud y las pendientes, está disponible hoy
+    if (availableBalance >= (amount + totalPendingAmount)) {
+      return { date: new Date(), isAvailableNow: true, pendingRequests: pendingRequests };
     }
 
-    // Calcular cuánto dinero falta
-    const needed = amount - availableBalance;
+    // Calcular cuánto dinero falta considerando solicitudes pendientes
+    const totalNeeded = (amount + totalPendingAmount) - availableBalance;
     
     // Calcular cuántos días hábiles se necesitan
     // Considerando que cada día se abona mínimo dailyMinimumDeposit
-    const daysNeeded = Math.ceil(needed / dailyMinimumDeposit);
+    const daysNeeded = Math.ceil(totalNeeded / dailyMinimumDeposit);
 
     // Calcular fecha de disponibilidad
     let currentDate = new Date();
@@ -653,46 +676,68 @@ export const calculateAvailabilityDate = async (amount) => {
     const availabilityDate = new Date(currentDate);
     availabilityDate.setDate(currentDate.getDate() + daysToAdd);
     
-    return availabilityDate;
+    return { date: availabilityDate, isAvailableNow: false, pendingRequests: pendingRequests };
   } catch (error) {
     console.error('Error calculando fecha de disponibilidad:', error);
     return null;
   }
 };
 
-// Obtener fecha de disponibilidad sugerida (endpoint público para clientes)
+// Obtener fecha estimada de entrega (endpoint público para clientes)
 export const getSuggestedAvailability = async (req, res) => {
   try {
     const { amount } = req.query;
     
     if (!amount || isNaN(parseFloat(amount))) {
       return res.status(400).json({
-        error: 'Se requiere el monto para calcular la disponibilidad',
+        error: 'Se requiere el monto para calcular la fecha estimada de entrega',
       });
     }
 
-    const availabilityDate = await calculateAvailabilityDate(parseFloat(amount));
+    const result = await calculateAvailabilityDate(parseFloat(amount));
     
-    if (!availabilityDate) {
+    if (!result) {
       return res.status(500).json({
-        error: 'Error al calcular disponibilidad',
+        error: 'Error al calcular fecha estimada de entrega',
       });
     }
 
+    const { date, isAvailableNow, pendingRequests } = result;
     const now = new Date();
-    const isAvailableNow = availabilityDate <= now;
+
+    // Formatear fecha de manera profesional
+    const formattedDate = date.toLocaleDateString('es-MX', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    let message;
+    if (isAvailableNow) {
+      message = 'Tu solicitud puede ser procesada y entregada inmediatamente. El efectivo estará disponible de forma instantánea una vez validado el depósito.';
+    } else {
+      const daysUntil = Math.ceil((date - now) / (1000 * 60 * 60 * 24));
+      if (pendingRequests > 0) {
+        message = `Fecha estimada de entrega: ${formattedDate}. Esta estimación considera el volumen actual de solicitudes en proceso (${pendingRequests} solicitud${pendingRequests > 1 ? 'es' : ''} pendiente${pendingRequests > 1 ? 's' : ''}) y los tiempos de procesamiento del servicio.`;
+      } else {
+        message = `Fecha estimada de entrega: ${formattedDate}. Esta estimación se basa en los tiempos de procesamiento y la capacidad operativa del servicio.`;
+      }
+    }
 
     res.json({
-      suggestedDate: availabilityDate.toISOString(),
+      estimatedDeliveryDate: date.toISOString(),
       isAvailableNow,
-      message: isAvailableNow
-        ? 'Tu solicitud puede ser procesada inmediatamente'
-        : `Fecha sugerida: ${availabilityDate.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`,
+      pendingRequests: pendingRequests || 0,
+      message,
+      formattedDate,
     });
   } catch (error) {
-    console.error('Error obteniendo disponibilidad sugerida:', error);
+    console.error('Error obteniendo fecha estimada de entrega:', error);
     res.status(500).json({
-      error: 'Error al calcular disponibilidad',
+      error: 'Error al calcular fecha estimada de entrega',
     });
   }
 };
