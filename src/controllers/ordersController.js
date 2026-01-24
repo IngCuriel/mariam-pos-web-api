@@ -179,7 +179,23 @@ export const updateOrderStatus = async (req, res) => {
 
     const order = await prisma.order.update({
       where: { id: parseInt(id) },
-      data: { status }
+      data: { status },
+      include: {
+        items: true,
+        branch: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      }
     });
 
     res.json({
@@ -190,6 +206,85 @@ export const updateOrderStatus = async (req, res) => {
     console.error('Error actualizando estado:', error);
     res.status(500).json({
       error: 'Error al actualizar estado'
+    });
+  }
+};
+
+// Actualizar disponibilidad de items del pedido (solo admin, solo cuando está PENDIENTE)
+export const updateOrderItemsAvailability = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { items } = req.body; // Array de { itemId, isAvailable }
+
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({
+        error: 'Se requiere un array de items con su disponibilidad'
+      });
+    }
+
+    // Verificar que el pedido existe y está en estado PENDIENTE
+    const order = await prisma.order.findUnique({
+      where: { id: parseInt(id) },
+      include: { items: true }
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        error: 'Pedido no encontrado'
+      });
+    }
+
+    if (order.status !== 'PENDIENTE') {
+      return res.status(400).json({
+        error: 'Solo se puede actualizar la disponibilidad de items cuando el pedido está en estado PENDIENTE'
+      });
+    }
+
+    // Actualizar cada item
+    const updatePromises = items.map(({ itemId, isAvailable }) => {
+      // Verificar que el item pertenece al pedido
+      const item = order.items.find(i => i.id === itemId);
+      if (!item) {
+        throw new Error(`Item ${itemId} no pertenece al pedido ${id}`);
+      }
+
+      return prisma.orderItem.update({
+        where: { id: itemId },
+        data: { isAvailable }
+      });
+    });
+
+    await Promise.all(updatePromises);
+
+    // Obtener el pedido actualizado
+    const updatedOrder = await prisma.order.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        items: true,
+        branch: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    res.json({
+      message: 'Disponibilidad de items actualizada exitosamente',
+      order: updatedOrder
+    });
+  } catch (error) {
+    console.error('Error actualizando disponibilidad de items:', error);
+    res.status(500).json({
+      error: error.message || 'Error al actualizar disponibilidad de items'
     });
   }
 };

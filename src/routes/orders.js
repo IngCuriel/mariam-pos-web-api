@@ -3,7 +3,8 @@ import {
   createOrder,
   getOrders,
   getOrderById,
-  updateOrderStatus
+  updateOrderStatus,
+  updateOrderItemsAvailability
 } from '../controllers/ordersController.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 
