@@ -715,16 +715,12 @@ export const getSuggestedAvailability = async (req, res) => {
       minute: '2-digit'
     });
 
+    // Mensaje más breve y preciso
     let message;
     if (isAvailableNow) {
-      message = 'Tu solicitud puede ser procesada y entregada inmediatamente. El efectivo estará disponible de forma instantánea una vez validado el depósito.';
+      message = 'Una vez validado el depósito, el efectivo estará disponible inmediatamente.';
     } else {
-      const daysUntil = Math.ceil((date - now) / (1000 * 60 * 60 * 24));
-      if (pendingRequests > 0) {
-        message = `Fecha estimada de entrega: ${formattedDate}. Esta estimación considera el volumen actual de solicitudes en proceso (${pendingRequests} solicitud${pendingRequests > 1 ? 'es' : ''} pendiente${pendingRequests > 1 ? 's' : ''}) y los tiempos de procesamiento del servicio.`;
-      } else {
-        message = `Fecha estimada de entrega: ${formattedDate}. Esta estimación se basa en los tiempos de procesamiento y la capacidad operativa del servicio.`;
-      }
+      message = formattedDate;
     }
 
     res.json({
