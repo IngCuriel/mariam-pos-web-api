@@ -44,13 +44,16 @@ export const generateUploadSignature = (params = {}) => {
 
   // Parámetros que se incluyen en la firma
   // IMPORTANTE: Para uploads directos a Cloudinary, TODOS los parámetros que se envíen
-  // en el FormData (excepto 'file') DEBEN estar en la firma
+  // en el FormData (excepto 'file' y 'api_key') DEBEN estar en la firma
+  // 
+  // NOTA CRÍTICA: api_key NO se incluye en la firma aunque se envíe en el FormData.
+  // Cloudinary usa api_key para identificar la cuenta, pero NO lo incluye en el cálculo de la firma.
+  // Solo se incluyen en la firma: folder, timestamp, y resource_type (si no es 'image')
+  //
   // Sin embargo, cuando usamos el endpoint /image/upload, Cloudinary ignora resource_type=image
   // Por lo tanto, NO lo incluimos en la firma ni en el FormData si es 'image'
   
-  // CRÍTICO: api_key DEBE estar en la firma porque se envía en el FormData
   const paramsToSign = {
-    api_key: apiKey,  // SIEMPRE incluir api_key porque se envía en el FormData
     folder: defaultParams.folder,
     timestamp: timestamp,
   };
@@ -59,11 +62,6 @@ export const generateUploadSignature = (params = {}) => {
   // Esto evita problemas de firma cuando Cloudinary ignora el parámetro
   if (defaultParams.resource_type && defaultParams.resource_type !== 'image') {
     paramsToSign.resource_type = defaultParams.resource_type;
-  }
-
-  // Verificar que api_key esté presente (crítico para la firma)
-  if (!paramsToSign.api_key) {
-    throw new Error('api_key es requerido para generar la firma de Cloudinary');
   }
 
   // Ordenar parámetros alfabéticamente (requerido por Cloudinary)
@@ -90,10 +88,12 @@ export const generateUploadSignature = (params = {}) => {
   console.log('📋 Parámetros ordenados alfabéticamente:');
   console.log('   Orden:', sortedKeys.join(', '));
   console.log('');
+  console.log('⚠️  NOTA IMPORTANTE: api_key NO se incluye en la firma');
+  console.log('   Cloudinary usa api_key para identificar la cuenta, pero NO lo incluye en el cálculo de la firma.');
+  console.log('   Solo se incluyen en la firma: folder, timestamp, y resource_type (si no es "image")');
+  console.log('');
   console.log('🔐 STRING QUE SE FIRMA (sortedParams):');
   console.log('   "' + sortedParams + '"');
-  console.log('');
-  console.log('🔐 Verificación api_key en firma:', sortedParams.includes('api_key=') ? '✅ SÍ' : '❌ NO');
   console.log('');
   console.log('🔐 String completo a firmar (con secret):');
   console.log('   "' + sortedParams + apiSecret + '"');
@@ -135,18 +135,19 @@ export const generateUploadSignature = (params = {}) => {
   }, null, 2));
   console.log('');
   console.log('📋 PARÁMETROS QUE EL FRONTEND DEBE ENVIAR A CLOUDINARY:');
-  console.log('   1. api_key: ' + apiKey);
-  console.log('   2. folder: ' + defaultParams.folder);
+  console.log('   1. api_key: ' + apiKey + ' (NO se incluye en la firma, solo se envía para identificar la cuenta)');
+  console.log('   2. folder: ' + defaultParams.folder + ' (SÍ se incluye en la firma)');
   console.log('   3. signature: ' + signature.substring(0, 20) + '...');
-  console.log('   4. timestamp: ' + timestamp);
+  console.log('   4. timestamp: ' + timestamp + ' (SÍ se incluye en la firma)');
   if (defaultParams.resource_type && defaultParams.resource_type !== 'image') {
-    console.log('   5. resource_type: ' + defaultParams.resource_type);
+    console.log('   5. resource_type: ' + defaultParams.resource_type + ' (SÍ se incluye en la firma)');
   }
   console.log('   6. file: [archivo de imagen]');
   console.log('');
   console.log('🔍 STRING QUE CLOUDINARY ESPERA EN LA FIRMA:');
   console.log('   "' + sortedParams + '"');
-  console.log('   (Debe coincidir EXACTAMENTE con los parámetros enviados en el FormData)');
+  console.log('   (NOTA: api_key NO está en este string, aunque se envía en el FormData)');
+  console.log('   (Debe coincidir EXACTAMENTE con los parámetros enviados en el FormData, EXCEPTO api_key)');
   console.log('═══════════════════════════════════════════════════════════\n');
   
   return response;
