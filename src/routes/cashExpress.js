@@ -9,12 +9,20 @@ import {
   uploadSignedReceipt,
   getConfig,
   updateConfig,
+  getSuggestedAvailability,
+  addBalance,
+  getBalanceHistory,
+  getCurrentBalance,
 } from '../controllers/cashExpressController.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Todas las rutas requieren autenticación
+// Rutas públicas (no requieren autenticación)
+router.get('/availability/suggested', getSuggestedAvailability);
+router.get('/balance/current', getCurrentBalance);
+
+// Todas las demás rutas requieren autenticación
 router.use(authenticate);
 
 // Rutas para clientes y admin
@@ -29,6 +37,10 @@ router.post('/:id/receipt/confirm', confirmDepositReceipt);
 // Rutas de configuración
 router.get('/config/get', getConfig);
 router.put('/config/update', requireAdmin, updateConfig);
+
+// Rutas de saldo (solo admin)
+router.post('/balance/add', requireAdmin, addBalance);
+router.get('/balance/history', requireAdmin, getBalanceHistory);
 
 // Rutas solo para admin
 router.patch('/:id/status', requireAdmin, updateRequestStatus);

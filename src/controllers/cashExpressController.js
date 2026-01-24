@@ -420,6 +420,8 @@ export const getConfig = async (req, res) => {
           endTime: '20:00',
           holidays: '[]',
           nonWorkingDayMessage: 'Tu solicitud será procesada el próximo día hábil.',
+          availableBalance: 0,
+          dailyMinimumDeposit: 500,
         },
       });
     }
@@ -431,6 +433,8 @@ export const getConfig = async (req, res) => {
       endTime: config.endTime,
       holidays: JSON.parse(config.holidays),
       nonWorkingDayMessage: config.nonWorkingDayMessage,
+      availableBalance: config.availableBalance || 0,
+      dailyMinimumDeposit: config.dailyMinimumDeposit || 500,
     });
   } catch (error) {
     console.error('Error obteniendo configuración:', error);
@@ -443,7 +447,7 @@ export const getConfig = async (req, res) => {
 // Actualizar configuración de Efectivo Express
 export const updateConfig = async (req, res) => {
   try {
-    const { serviceDays, startTime, endTime, holidays, nonWorkingDayMessage } = req.body;
+    const { serviceDays, startTime, endTime, holidays, nonWorkingDayMessage, dailyMinimumDeposit } = req.body;
 
     // Validaciones
     if (!Array.isArray(serviceDays) || serviceDays.length === 0) {
@@ -496,6 +500,7 @@ export const updateConfig = async (req, res) => {
           endTime,
           holidays: JSON.stringify(holidays || []),
           nonWorkingDayMessage: nonWorkingDayMessage || 'Tu solicitud será procesada el próximo día hábil.',
+          dailyMinimumDeposit: dailyMinimumDeposit || 500,
         },
       });
     } else {
@@ -507,6 +512,7 @@ export const updateConfig = async (req, res) => {
           endTime,
           holidays: JSON.stringify(holidays || []),
           nonWorkingDayMessage: nonWorkingDayMessage || 'Tu solicitud será procesada el próximo día hábil.',
+          ...(dailyMinimumDeposit !== undefined && { dailyMinimumDeposit }),
         },
       });
     }
@@ -520,12 +526,225 @@ export const updateConfig = async (req, res) => {
         endTime: config.endTime,
         holidays: JSON.parse(config.holidays),
         nonWorkingDayMessage: config.nonWorkingDayMessage,
+        availableBalance: config.availableBalance || 0,
+        dailyMinimumDeposit: config.dailyMinimumDeposit || 500,
       },
     });
   } catch (error) {
     console.error('Error actualizando configuración:', error);
     res.status(500).json({
       error: 'Error al actualizar configuración',
+    });
+  }
+};
+
+// Calcular fecha de disponibilidad basada en saldo
+export const calculateAvailabilityDate = async (amount) => {
+  try {
+    const config = await prisma.cashExpressConfig.findFirst();
+    if (!config) {
+      return null;
+    }
+
+    const availableBalance = config.availableBalance || 0;
+    const dailyMinimumDeposit = config.dailyMinimumDeposit || 500;
+    const serviceDays = JSON.parse(config.serviceDays || '[1,2,3,4,5]');
+    const holidays = JSON.parse(config.holidays || '[]');
+
+    // Si hay saldo suficiente, está disponible hoy
+    if (availableBalance >= amount) {
+      return new Date();
+    }
+
+    // Calcular cuánto dinero falta
+    const needed = amount - availableBalance;
+    
+    // Calcular cuántos días hábiles se necesitan
+    // Considerando que cada día se abona mínimo dailyMinimumDeposit
+    const daysNeeded = Math.ceil(needed / dailyMinimumDeposit);
+
+    // Calcular fecha de disponibilidad
+    let currentDate = new Date();
+    let workingDaysAdded = 0;
+    let daysToAdd = 0;
+
+    while (workingDaysAdded < daysNeeded) {
+      daysToAdd++;
+      const checkDate = new Date(currentDate);
+      checkDate.setDate(currentDate.getDate() + daysToAdd);
+      
+      const dayOfWeek = checkDate.getDay();
+      const dateString = `${checkDate.getFullYear()}-${(checkDate.getMonth() + 1).toString().padStart(2, '0')}-${checkDate.getDate().toString().padStart(2, '0')}`;
+      
+      // Verificar si es día hábil y no es festivo
+      if (serviceDays.includes(dayOfWeek) && !holidays.includes(dateString)) {
+        workingDaysAdded++;
+      }
+    }
+
+    const availabilityDate = new Date(currentDate);
+    availabilityDate.setDate(currentDate.getDate() + daysToAdd);
+    
+    return availabilityDate;
+  } catch (error) {
+    console.error('Error calculando fecha de disponibilidad:', error);
+    return null;
+  }
+};
+
+// Obtener fecha de disponibilidad sugerida (endpoint público para clientes)
+export const getSuggestedAvailability = async (req, res) => {
+  try {
+    const { amount } = req.query;
+    
+    if (!amount || isNaN(parseFloat(amount))) {
+      return res.status(400).json({
+        error: 'Se requiere el monto para calcular la disponibilidad',
+      });
+    }
+
+    const availabilityDate = await calculateAvailabilityDate(parseFloat(amount));
+    
+    if (!availabilityDate) {
+      return res.status(500).json({
+        error: 'Error al calcular disponibilidad',
+      });
+    }
+
+    const now = new Date();
+    const isAvailableNow = availabilityDate <= now;
+
+    res.json({
+      suggestedDate: availabilityDate.toISOString(),
+      isAvailableNow,
+      message: isAvailableNow
+        ? 'Tu solicitud puede ser procesada inmediatamente'
+        : `Fecha sugerida: ${availabilityDate.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`,
+    });
+  } catch (error) {
+    console.error('Error obteniendo disponibilidad sugerida:', error);
+    res.status(500).json({
+      error: 'Error al calcular disponibilidad',
+    });
+  }
+};
+
+// Agregar abono de saldo (solo admin)
+export const addBalance = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { amount, description } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        error: 'El monto debe ser mayor a 0',
+      });
+    }
+
+    // Obtener configuración
+    let config = await prisma.cashExpressConfig.findFirst();
+    if (!config) {
+      return res.status(404).json({
+        error: 'Configuración no encontrada',
+      });
+    }
+
+    const previousBalance = config.availableBalance || 0;
+    const newBalance = previousBalance + parseFloat(amount);
+
+    // Actualizar saldo
+    config = await prisma.cashExpressConfig.update({
+      where: { id: config.id },
+      data: {
+        availableBalance: newBalance,
+      },
+    });
+
+    // Registrar en historial
+    await prisma.cashExpressBalanceHistory.create({
+      data: {
+        amount: parseFloat(amount),
+        description: description || 'Abono de saldo',
+        previousBalance,
+        newBalance,
+        userId,
+      },
+    });
+
+    res.json({
+      message: 'Abono agregado exitosamente',
+      balance: {
+        previousBalance,
+        amount: parseFloat(amount),
+        newBalance,
+      },
+    });
+  } catch (error) {
+    console.error('Error agregando abono:', error);
+    res.status(500).json({
+      error: 'Error al agregar abono',
+    });
+  }
+};
+
+// Obtener historial de saldo (solo admin)
+export const getBalanceHistory = async (req, res) => {
+  try {
+    const { limit = 50, offset = 0 } = req.query;
+
+    const history = await prisma.cashExpressBalanceHistory.findMany({
+      take: parseInt(limit),
+      skip: parseInt(offset),
+      orderBy: {
+        createdAt: 'desc',
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    const total = await prisma.cashExpressBalanceHistory.count();
+
+    res.json({
+      history,
+      total,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    });
+  } catch (error) {
+    console.error('Error obteniendo historial:', error);
+    res.status(500).json({
+      error: 'Error al obtener historial',
+    });
+  }
+};
+
+// Obtener saldo actual (público, para mostrar al cliente)
+export const getCurrentBalance = async (req, res) => {
+  try {
+    const config = await prisma.cashExpressConfig.findFirst();
+    
+    if (!config) {
+      return res.json({
+        availableBalance: 0,
+        dailyMinimumDeposit: 500,
+      });
+    }
+
+    res.json({
+      availableBalance: config.availableBalance || 0,
+      dailyMinimumDeposit: config.dailyMinimumDeposit || 500,
+    });
+  } catch (error) {
+    console.error('Error obteniendo saldo:', error);
+    res.status(500).json({
+      error: 'Error al obtener saldo',
     });
   }
 };

@@ -194,6 +194,7 @@ model User {
   // Relaciones
   orders              Order[]
   cashExpressRequests CashExpressRequest[]
+  balanceHistory      CashExpressBalanceHistory[]
 
   @@index([email])
   @@index([role])
@@ -271,11 +272,35 @@ model CashExpressConfig {
   holidays             String  @default("[]")
   // Mensaje personalizado para días no laborables
   nonWorkingDayMessage String? @default("Tu solicitud será procesada el próximo día hábil.")
+  // Saldo disponible actual
+  availableBalance     Float   @default(0)
+  // Abono mínimo diario (por defecto $500)
+  dailyMinimumDeposit  Float   @default(500)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relación con historial de abonos
+  balanceHistory CashExpressBalanceHistory[]
+
   @@map("cash_express_config")
+}
+
+model CashExpressBalanceHistory {
+  id              Int     @id @default(autoincrement())
+  amount          Float // Monto del abono (positivo) o retiro (negativo)
+  description     String? // Descripción del movimiento
+  previousBalance Float // Saldo anterior
+  newBalance      Float // Saldo nuevo
+  userId          Int? // Usuario que realizó el movimiento (admin)
+  user            User?   @relation(fields: [userId], references: [id])
+
+  createdAt           DateTime           @default(now())
+  CashExpressConfig   CashExpressConfig? @relation(fields: [cashExpressConfigId], references: [id])
+  cashExpressConfigId Int?
+
+  @@index([createdAt])
+  @@map("cash_express_balance_history")
 }
 
 model CashExpressRequest {
