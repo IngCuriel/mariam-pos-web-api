@@ -9,7 +9,8 @@ import {
   getAllBranches,
   getProductById,
   updateCategory,
-  getProductsForConfig,
+  getCategoriesForConfig,
+  getProductsByCategoryForConfig,
   updateProductVisibility,
   addProductImage,
   deleteProductImage,
@@ -33,7 +34,8 @@ router.get("/categories/branch/:branch", getCategoriesByBranch);
 router.patch("/categories/:id", authenticate, requireAdmin, updateCategory); // Actualizar categoría (solo admin)
 
 // Rutas de configuración de productos (solo admin)
-router.get("/config/list", authenticate, requireAdmin, getProductsForConfig); // Obtener productos de categorías visibles
+router.get("/config/categories", authenticate, requireAdmin, getCategoriesForConfig); // Obtener solo categorías visibles
+router.get("/config/category/:categoryId/products", authenticate, requireAdmin, getProductsByCategoryForConfig); // Obtener productos de una categoría
 router.patch("/:id/visibility", authenticate, requireAdmin, updateProductVisibility); // Actualizar visibilidad del producto
 router.post("/:id/images", authenticate, requireAdmin, addProductImage); // Agregar imagen al producto
 router.delete("/:id/images/:imageId", authenticate, requireAdmin, deleteProductImage); // Eliminar imagen del producto

@@ -840,28 +840,57 @@ export const updateCategory = async (req, res) => {
   }
 };
 
-// Obtener productos de categorías visibles para configuración (solo admin)
-export const getProductsForConfig = async (req, res) => {
+// Obtener solo categorías visibles para configuración (solo admin)
+export const getCategoriesForConfig = async (req, res) => {
   try {
-    // Obtener todas las categorías visibles
+    // Obtener todas las categorías visibles con su imagen
     const visibleCategories = await prisma.category.findMany({
       where: { showInStore: true },
-      select: { id: true, name: true }
+      select: {
+        id: true,
+        name: true,
+        image: true,
+        description: true
+      },
+      orderBy: { name: 'asc' }
     });
     
-    const visibleCategoryIds = visibleCategories.map(cat => cat.id);
+    res.json({
+      categories: visibleCategories
+    });
+  } catch (error) {
+    console.error('Error obteniendo categorías para configuración:', error);
+    res.status(500).json({ error: 'Error obteniendo categorías' });
+  }
+};
+
+// Obtener productos de una categoría específica para configuración (solo admin)
+export const getProductsByCategoryForConfig = async (req, res) => {
+  try {
+    const { categoryId } = req.params;
     
-    if (visibleCategoryIds.length === 0) {
-      return res.json({
-        categories: [],
-        productsByCategory: {}
-      });
+    if (!categoryId) {
+      return res.status(400).json({ error: 'ID de categoría requerido' });
     }
     
-    // Obtener productos de categorías visibles con sus imágenes
+    // Verificar que la categoría existe y está visible
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      select: {
+        id: true,
+        name: true,
+        showInStore: true
+      }
+    });
+    
+    if (!category || !category.showInStore) {
+      return res.status(404).json({ error: 'Categoría no encontrada o no visible' });
+    }
+    
+    // Obtener productos de la categoría con sus imágenes
     const products = await prisma.product.findMany({
       where: {
-        categoryId: { in: visibleCategoryIds }
+        categoryId: categoryId
       },
       include: {
         category: {
@@ -881,27 +910,15 @@ export const getProductsForConfig = async (req, res) => {
           orderBy: { displayOrder: 'asc' }
         }
       },
-      orderBy: [
-        { categoryId: 'asc' },
-        { name: 'asc' }
-      ]
-    });
-    
-    // Agrupar productos por categoría
-    const productsByCategory = {};
-    visibleCategories.forEach(cat => {
-      productsByCategory[cat.id] = {
-        category: cat,
-        products: products.filter(p => p.categoryId === cat.id)
-      };
+      orderBy: { name: 'asc' }
     });
     
     res.json({
-      categories: visibleCategories,
-      productsByCategory
+      category,
+      products
     });
   } catch (error) {
-    console.error('Error obteniendo productos para configuración:', error);
+    console.error('Error obteniendo productos por categoría:', error);
     res.status(500).json({ error: 'Error obteniendo productos' });
   }
 };
