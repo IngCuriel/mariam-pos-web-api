@@ -678,32 +678,21 @@ export const getAllCategories = async (req, res) => {
     
     const whereClause = showInStoreOnly ? { showInStore: true } : {};
     
-    // Obtener todas las categorías sin distinct para evitar problemas de actualización
-    // Si hay categorías duplicadas por nombre, se mostrarán todas
+    // Obtener TODAS las categorías que cumplan el filtro (sin distinct)
+    // Esto permite mostrar todas las categorías, incluso si tienen el mismo nombre pero diferente sucursal
     const categories = await prisma.category.findMany({
       where: whereClause,
       include: {
         branch: true
       },
-      orderBy: { name: 'asc' }
+      orderBy: [
+        { name: 'asc' },
+        { branchId: 'asc' } // Ordenar también por sucursal para consistencia
+      ]
     });
 
-    // Si se solicita solo para la tienda, aplicar distinct por nombre para evitar duplicados
-    // pero mantener todas las categorías cuando se solicitan todas (para admin)
-    let categoriesToReturn = categories;
-    if (showInStoreOnly) {
-      // Para la tienda, agrupar por nombre y tomar la primera (o la que tenga showInStore: true)
-      const categoriesMap = new Map();
-      categories.forEach(cat => {
-        if (!categoriesMap.has(cat.name) || cat.showInStore) {
-          categoriesMap.set(cat.name, cat);
-        }
-      });
-      categoriesToReturn = Array.from(categoriesMap.values());
-    }
-
     // Mapear categorías para incluir branch.name como branch para compatibilidad con frontend
-    const categoriesWithBranch = categoriesToReturn.map(category => ({
+    const categoriesWithBranch = categories.map(category => ({
       ...category,
       branch: category.branch?.name || null
     }));
