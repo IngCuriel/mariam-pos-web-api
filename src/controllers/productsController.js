@@ -589,6 +589,7 @@ export const getAllProducts = async (req, res) => {
       search, 
       categoryId, 
       branch,
+      showInStoreOnly = 'false', // Nuevo parámetro para filtrar por categorías visibles
       limit = 30,
       offset = 0
     } = req.query;
@@ -606,6 +607,28 @@ export const getAllProducts = async (req, res) => {
     // Filtro por categoría
     if (categoryId) {
       where.categoryId = categoryId;
+    } else if (showInStoreOnly === 'true') {
+      // Si no hay categoryId específico pero se solicita solo categorías visibles,
+      // obtener IDs de categorías con showInStore: true
+      const visibleCategories = await prisma.category.findMany({
+        where: { showInStore: true },
+        select: { id: true }
+      });
+      
+      const visibleCategoryIds = visibleCategories.map(cat => cat.id);
+      
+      if (visibleCategoryIds.length > 0) {
+        where.categoryId = { in: visibleCategoryIds };
+      } else {
+        // Si no hay categorías visibles, retornar respuesta vacía
+        return res.json({
+          products: [],
+          total: 0,
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+          hasMore: false
+        });
+      }
     }
     
     // Filtro por sucursal
