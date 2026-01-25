@@ -17,7 +17,10 @@ router.post('/signature', (req, res) => {
     console.log('📋 Body recibido:', JSON.stringify(req.body, null, 2));
     console.log('📋 Query params:', JSON.stringify(req.query, null, 2));
     
-    const signature = generateUploadSignature();
+    // Permitir especificar el folder desde el frontend
+    const { folder } = req.body || {};
+    const params = folder ? { folder } : {};
+    const signature = generateUploadSignature(params);
     
     console.log('═══════════════════════════════════════════════════════════');
     console.log('✅ FIRMA GENERADA EXITOSAMENTE');
