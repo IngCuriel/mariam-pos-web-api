@@ -605,30 +605,53 @@ export const getAllProducts = async (req, res) => {
     }
     
     // Filtro por categoría
-    if (categoryId) {
-      where.categoryId = categoryId;
-    } else if (showInStoreOnly === 'true') {
-      // Si no hay categoryId específico pero se solicita solo categorías visibles,
-      // obtener IDs de categorías con showInStore: true
-      const visibleCategories = await prisma.category.findMany({
-        where: { showInStore: true },
-        select: { id: true }
-      });
-      
-      const visibleCategoryIds = visibleCategories.map(cat => cat.id);
-      
-      if (visibleCategoryIds.length > 0) {
-        where.categoryId = { in: visibleCategoryIds };
-      } else {
-        // Si no hay categorías visibles, retornar respuesta vacía
-        return res.json({
-          products: [],
-          total: 0,
-          limit: parseInt(limit),
-          offset: parseInt(offset),
-          hasMore: false
+    // Si se solicita solo categorías visibles (showInStoreOnly), siempre filtrar por showInStore: true
+    if (showInStoreOnly === 'true') {
+      if (categoryId) {
+        // Si hay categoryId específico, verificar que esa categoría tenga showInStore: true
+        const category = await prisma.category.findUnique({
+          where: { id: categoryId },
+          select: { id: true, showInStore: true }
         });
+        
+        if (!category || !category.showInStore) {
+          // Si la categoría no existe o no está visible, retornar respuesta vacía
+          return res.json({
+            products: [],
+            total: 0,
+            limit: parseInt(limit),
+            offset: parseInt(offset),
+            hasMore: false
+          });
+        }
+        
+        // Si la categoría es visible, usar el categoryId normalmente
+        where.categoryId = categoryId;
+      } else {
+        // Si no hay categoryId específico, obtener IDs de todas las categorías visibles
+        const visibleCategories = await prisma.category.findMany({
+          where: { showInStore: true },
+          select: { id: true }
+        });
+        
+        const visibleCategoryIds = visibleCategories.map(cat => cat.id);
+        
+        if (visibleCategoryIds.length > 0) {
+          where.categoryId = { in: visibleCategoryIds };
+        } else {
+          // Si no hay categorías visibles, retornar respuesta vacía
+          return res.json({
+            products: [],
+            total: 0,
+            limit: parseInt(limit),
+            offset: parseInt(offset),
+            hasMore: false
+          });
+        }
       }
+    } else if (categoryId) {
+      // Si no se solicita showInStoreOnly pero hay categoryId, usar normalmente (para admin u otros casos)
+      where.categoryId = categoryId;
     }
     
     // Filtro por sucursal
