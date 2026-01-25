@@ -76,14 +76,18 @@ model Category {
   name        String
   description String?
   showInPOS   Boolean  @default(false)
+  showInStore Boolean  @default(true) // Mostrar en tienda en línea
+  image       String?  // URL de la imagen de la categoría
   branchId    Int?
   branch      Branch?  @relation(fields: [branchId], references: [id])
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
 
   products Product[]
 
   @@index([branchId])
   @@index([name])
+  @@index([showInStore])
 }
 
 model Product {

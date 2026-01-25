@@ -7,8 +7,10 @@ import {
   getAllProducts,
   getAllCategories,
   getAllBranches,
-  getProductById
+  getProductById,
+  updateCategory
 } from "../controllers/productsController.js";
+import { authenticate, requireAdmin } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -23,6 +25,7 @@ router.get("/:id", getProductById); // Obtener un producto por ID
 router.post("/categories/bulk", createCategoriesBulk);
 router.get("/categories/all", getAllCategories); // Obtener todas las categorías
 router.get("/categories/branch/:branch", getCategoriesByBranch);
+router.patch("/categories/:id", authenticate, requireAdmin, updateCategory); // Actualizar categoría (solo admin)
 
 export default router;
 

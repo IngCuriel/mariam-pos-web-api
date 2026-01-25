@@ -673,7 +673,13 @@ export const getAllProducts = async (req, res) => {
 // Obtener todas las categorías de todas las sucursales
 export const getAllCategories = async (req, res) => {
   try {
+    // Si se solicita solo para la tienda, filtrar por showInStore
+    const showInStoreOnly = req.query.showInStore === 'true';
+    
+    const whereClause = showInStoreOnly ? { showInStore: true } : {};
+    
     const categories = await prisma.category.findMany({
+      where: whereClause,
       include: {
         branch: true
       },
@@ -707,6 +713,56 @@ export const getAllBranches = async (req, res) => {
   } catch (error) {
     console.error('Error obteniendo sucursales:', error);
     res.status(500).json({ error: 'Error obteniendo sucursales' });
+  }
+};
+
+// Actualizar una categoría (solo admin)
+export const updateCategory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { showInStore, image } = req.body;
+
+    // Validar que al menos un campo se esté actualizando
+    if (showInStore === undefined && image === undefined) {
+      return res.status(400).json({ 
+        error: 'Debes proporcionar al menos un campo para actualizar (showInStore o image)' 
+      });
+    }
+
+    // Construir objeto de actualización
+    const updateData = {};
+    if (showInStore !== undefined) {
+      updateData.showInStore = Boolean(showInStore);
+    }
+    if (image !== undefined) {
+      updateData.image = image || null;
+    }
+
+    // Actualizar la categoría
+    const updatedCategory = await prisma.category.update({
+      where: { id },
+      data: updateData,
+      include: {
+        branch: true
+      }
+    });
+
+    // Mapear para incluir branch.name como branch
+    const categoryWithBranch = {
+      ...updatedCategory,
+      branch: updatedCategory.branch?.name || null
+    };
+
+    res.json({ 
+      message: 'Categoría actualizada exitosamente',
+      category: categoryWithBranch
+    });
+  } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Categoría no encontrada' });
+    }
+    console.error('Error actualizando categoría:', error);
+    res.status(500).json({ error: 'Error actualizando categoría' });
   }
 };
 
