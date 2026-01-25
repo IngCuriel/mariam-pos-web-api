@@ -102,9 +102,11 @@ model Product {
   icon           String?
   trackInventory Boolean? @default(false)
   isKit          Boolean  @default(false)
+  showInStore    Boolean  @default(true) // Mostrar en tienda en línea (por defecto visible)
   branchId       Int?
   branch         Branch?  @relation(fields: [branchId], references: [id])
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
 
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id])
@@ -113,11 +115,25 @@ model Product {
   inventory     Inventory?
   kitItems      KitItem[]             @relation("Kit")
   kitsAsItem    KitItem[]             @relation("KitProduct")
+  images        ProductImage[]
 
   @@index([code])
   @@index([name])
   @@index([branchId])
   @@index([categoryId])
+  @@index([showInStore])
+}
+
+model ProductImage {
+  id        Int      @id @default(autoincrement())
+  url       String   // URL de la imagen en Cloudinary
+  displayOrder Int   @default(0) // Orden de visualización
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([displayOrder])
 }
 
 model ProductPresentation {

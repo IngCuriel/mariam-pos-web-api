@@ -649,6 +649,9 @@ export const getAllProducts = async (req, res) => {
           });
         }
       }
+      
+      // También filtrar por productos con showInStore: true
+      where.showInStore = true;
     } else if (categoryId) {
       // Si no se solicita showInStoreOnly pero hay categoryId, usar normalmente (para admin u otros casos)
       where.categoryId = categoryId;
@@ -828,6 +831,228 @@ export const updateCategory = async (req, res) => {
       error: 'Error actualizando categoría',
       details: error.message 
     });
+  }
+};
+
+// Obtener productos de categorías visibles para configuración (solo admin)
+export const getProductsForConfig = async (req, res) => {
+  try {
+    // Obtener todas las categorías visibles
+    const visibleCategories = await prisma.category.findMany({
+      where: { showInStore: true },
+      select: { id: true, name: true }
+    });
+    
+    const visibleCategoryIds = visibleCategories.map(cat => cat.id);
+    
+    if (visibleCategoryIds.length === 0) {
+      return res.json({
+        categories: [],
+        productsByCategory: {}
+      });
+    }
+    
+    // Obtener productos de categorías visibles con sus imágenes
+    const products = await prisma.product.findMany({
+      where: {
+        categoryId: { in: visibleCategoryIds }
+      },
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            showInStore: true
+          }
+        },
+        branch: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        images: {
+          orderBy: { displayOrder: 'asc' }
+        }
+      },
+      orderBy: [
+        { categoryId: 'asc' },
+        { name: 'asc' }
+      ]
+    });
+    
+    // Agrupar productos por categoría
+    const productsByCategory = {};
+    visibleCategories.forEach(cat => {
+      productsByCategory[cat.id] = {
+        category: cat,
+        products: products.filter(p => p.categoryId === cat.id)
+      };
+    });
+    
+    res.json({
+      categories: visibleCategories,
+      productsByCategory
+    });
+  } catch (error) {
+    console.error('Error obteniendo productos para configuración:', error);
+    res.status(500).json({ error: 'Error obteniendo productos' });
+  }
+};
+
+// Actualizar visibilidad de un producto (solo admin)
+export const updateProductVisibility = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { showInStore } = req.body;
+    
+    if (showInStore === undefined) {
+      return res.status(400).json({ 
+        error: 'Debes proporcionar el campo showInStore' 
+      });
+    }
+    
+    const updatedProduct = await prisma.product.update({
+      where: { id: parseInt(id) },
+      data: { showInStore: Boolean(showInStore) },
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        images: {
+          orderBy: { displayOrder: 'asc' }
+        }
+      }
+    });
+    
+    res.json({ 
+      message: 'Producto actualizado exitosamente',
+      product: updatedProduct
+    });
+  } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+    console.error('Error actualizando visibilidad del producto:', error);
+    res.status(500).json({ error: 'Error actualizando producto' });
+  }
+};
+
+// Agregar imagen a un producto (solo admin)
+export const addProductImage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { url, displayOrder } = req.body;
+    
+    if (!url) {
+      return res.status(400).json({ 
+        error: 'Debes proporcionar la URL de la imagen' 
+      });
+    }
+    
+    // Verificar que el producto existe
+    const product = await prisma.product.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        images: true
+      }
+    });
+    
+    if (!product) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+    
+    // Verificar que no se excedan 5 imágenes
+    if (product.images.length >= 5) {
+      return res.status(400).json({ 
+        error: 'Un producto puede tener máximo 5 imágenes' 
+      });
+    }
+    
+    // Crear la imagen
+    const newImage = await prisma.productImage.create({
+      data: {
+        url,
+        displayOrder: displayOrder || product.images.length,
+        productId: parseInt(id)
+      }
+    });
+    
+    res.json({ 
+      message: 'Imagen agregada exitosamente',
+      image: newImage
+    });
+  } catch (error) {
+    console.error('Error agregando imagen al producto:', error);
+    res.status(500).json({ error: 'Error agregando imagen' });
+  }
+};
+
+// Eliminar imagen de un producto (solo admin)
+export const deleteProductImage = async (req, res) => {
+  try {
+    const { id, imageId } = req.params;
+    
+    // Verificar que la imagen pertenece al producto
+    const image = await prisma.productImage.findFirst({
+      where: {
+        id: parseInt(imageId),
+        productId: parseInt(id)
+      }
+    });
+    
+    if (!image) {
+      return res.status(404).json({ error: 'Imagen no encontrada' });
+    }
+    
+    // Eliminar la imagen
+    await prisma.productImage.delete({
+      where: { id: parseInt(imageId) }
+    });
+    
+    res.json({ 
+      message: 'Imagen eliminada exitosamente'
+    });
+  } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Imagen no encontrada' });
+    }
+    console.error('Error eliminando imagen del producto:', error);
+    res.status(500).json({ error: 'Error eliminando imagen' });
+  }
+};
+
+// Reordenar imágenes de un producto (solo admin)
+export const reorderProductImages = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { imageOrders } = req.body; // Array de { imageId, displayOrder }
+    
+    if (!Array.isArray(imageOrders)) {
+      return res.status(400).json({ 
+        error: 'Debes proporcionar un arreglo de imageOrders' 
+      });
+    }
+    
+    // Actualizar el orden de cada imagen
+    await prisma.$transaction(
+      imageOrders.map(({ imageId, displayOrder }) =>
+        prisma.productImage.update({
+          where: { id: imageId },
+          data: { displayOrder }
+        })
+      )
+    );
+    
+    res.json({ 
+      message: 'Orden de imágenes actualizado exitosamente'
+    });
+  } catch (error) {
+    console.error('Error reordenando imágenes:', error);
+    res.status(500).json({ error: 'Error reordenando imágenes' });
   }
 };
 
