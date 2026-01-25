@@ -456,6 +456,9 @@ export const getProductById = async (req, res) => {
     const include = {
       category: true,
       branch: true,
+      images: {
+        orderBy: { displayOrder: 'asc' }
+      },
       ...(includePresentations === 'true' && { presentations: true }),
       ...(includeInventory === 'true' && { inventory: true }),
       ...(includePresentations === 'true' && {
@@ -679,6 +682,9 @@ export const getAllProducts = async (req, res) => {
     const include = {
       category: true,
       branch: true,
+      images: {
+        orderBy: { displayOrder: 'asc' }
+      },
       ...(includePresentations === 'true' && { presentations: true }),
       ...(includeInventory === 'true' && { inventory: true })
     };
