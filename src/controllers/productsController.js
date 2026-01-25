@@ -678,17 +678,32 @@ export const getAllCategories = async (req, res) => {
     
     const whereClause = showInStoreOnly ? { showInStore: true } : {};
     
+    // Obtener todas las categorías sin distinct para evitar problemas de actualización
+    // Si hay categorías duplicadas por nombre, se mostrarán todas
     const categories = await prisma.category.findMany({
       where: whereClause,
       include: {
         branch: true
       },
-      distinct: ['name'],
       orderBy: { name: 'asc' }
     });
 
+    // Si se solicita solo para la tienda, aplicar distinct por nombre para evitar duplicados
+    // pero mantener todas las categorías cuando se solicitan todas (para admin)
+    let categoriesToReturn = categories;
+    if (showInStoreOnly) {
+      // Para la tienda, agrupar por nombre y tomar la primera (o la que tenga showInStore: true)
+      const categoriesMap = new Map();
+      categories.forEach(cat => {
+        if (!categoriesMap.has(cat.name) || cat.showInStore) {
+          categoriesMap.set(cat.name, cat);
+        }
+      });
+      categoriesToReturn = Array.from(categoriesMap.values());
+    }
+
     // Mapear categorías para incluir branch.name como branch para compatibilidad con frontend
-    const categoriesWithBranch = categories.map(category => ({
+    const categoriesWithBranch = categoriesToReturn.map(category => ({
       ...category,
       branch: category.branch?.name || null
     }));
@@ -722,6 +737,8 @@ export const updateCategory = async (req, res) => {
     const { id } = req.params;
     const { showInStore, image } = req.body;
 
+    console.log(`🔄 [updateCategory] Actualizando categoría ${id}:`, { showInStore, image });
+
     // Validar que al menos un campo se esté actualizando
     if (showInStore === undefined && image === undefined) {
       return res.status(400).json({ 
@@ -733,9 +750,11 @@ export const updateCategory = async (req, res) => {
     const updateData = {};
     if (showInStore !== undefined) {
       updateData.showInStore = Boolean(showInStore);
+      console.log(`   ✅ showInStore será: ${updateData.showInStore}`);
     }
     if (image !== undefined) {
       updateData.image = image || null;
+      console.log(`   ✅ image será: ${updateData.image ? 'actualizada' : 'eliminada'}`);
     }
 
     // Actualizar la categoría
@@ -745,6 +764,13 @@ export const updateCategory = async (req, res) => {
       include: {
         branch: true
       }
+    });
+
+    console.log(`✅ [updateCategory] Categoría actualizada exitosamente:`, {
+      id: updatedCategory.id,
+      name: updatedCategory.name,
+      showInStore: updatedCategory.showInStore,
+      image: updatedCategory.image ? 'presente' : 'sin imagen'
     });
 
     // Mapear para incluir branch.name como branch
@@ -759,10 +785,14 @@ export const updateCategory = async (req, res) => {
     });
   } catch (error) {
     if (error.code === 'P2025') {
+      console.error(`❌ [updateCategory] Categoría no encontrada: ${req.params.id}`);
       return res.status(404).json({ error: 'Categoría no encontrada' });
     }
-    console.error('Error actualizando categoría:', error);
-    res.status(500).json({ error: 'Error actualizando categoría' });
+    console.error('❌ [updateCategory] Error actualizando categoría:', error);
+    res.status(500).json({ 
+      error: 'Error actualizando categoría',
+      details: error.message 
+    });
   }
 };
 

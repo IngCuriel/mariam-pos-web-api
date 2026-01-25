@@ -76,7 +76,7 @@ model Category {
   name        String
   description String?
   showInPOS   Boolean  @default(false)
-  showInStore Boolean  @default(true) // Mostrar en tienda en línea
+  showInStore Boolean  @default(false) // Mostrar en tienda en línea (por defecto oculto)
   image       String?  // URL de la imagen de la categoría
   branchId    Int?
   branch      Branch?  @relation(fields: [branchId], references: [id])
