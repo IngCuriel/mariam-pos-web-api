@@ -60,9 +60,15 @@ export const createRequest = async (req, res) => {
     // Los datos del remitente y destinatario son opcionales al crear la solicitud
     // Se pedirán después de que el admin valide el depósito
 
-    // Calcular comisión como porcentaje (redondear siempre hacia arriba a 2 decimales)
-    const commission = Math.ceil((amount * commissionPercentage) / 100 * 100) / 100;
-    const totalToDeposit = amount + commission;
+    // Calcular comisión como porcentaje
+    const commission = (amount * commissionPercentage) / 100;
+    
+    // Calcular total con decimales
+    const totalWithDecimals = amount + commission;
+    
+    // Redondear el total hacia arriba al siguiente peso entero (para depósitos en efectivo)
+    // Esto asegura que el usuario siempre deposite un monto entero
+    const totalToDeposit = Math.ceil(totalWithDecimals);
 
     // Calcular fecha estimada de entrega
     const availabilityResult = await calculateAvailabilityDate(parseFloat(amount));
