@@ -24,6 +24,7 @@ import { authenticate, requireAdmin } from '../middleware/auth.js';
 const router = express.Router();
 
 // Rutas públicas (no requieren autenticación)
+router.get('/config/get', getConfig); // Configuración pública para que cualquier usuario pueda ver horarios y comisiones
 router.get('/availability/suggested', getSuggestedAvailability);
 router.get('/balance/current', getCurrentBalance);
 router.get('/bank-accounts', getBankAccounts);
@@ -41,8 +42,7 @@ router.patch('/:id/receipt', uploadDepositReceipt);
 router.post('/:id/receipt/confirm', confirmDepositReceipt);
 router.patch('/:id/recipient-data', updateRecipientData);
 
-// Rutas de configuración
-router.get('/config/get', getConfig);
+// Rutas de configuración (get ya está en rutas públicas, solo update requiere admin)
 router.put('/config/update', requireAdmin, updateConfig);
 
 // Rutas de saldo (solo admin)
