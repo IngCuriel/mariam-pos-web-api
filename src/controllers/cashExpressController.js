@@ -469,21 +469,21 @@ export const updateRecipientData = async (req, res) => {
       });
     }
 
-    // Validar que todos los campos estén presentes
-    if (!senderName || !senderPhone || !recipientName || !recipientPhone || !relationship) {
+    // Validar que los campos requeridos estén presentes (teléfonos son opcionales)
+    if (!senderName || !recipientName || !relationship) {
       return res.status(400).json({
-        error: 'Todos los campos son requeridos'
+        error: 'Los campos requeridos son: nombre del remitente, nombre del destinatario y relación'
       });
     }
 
-    // Actualizar los datos
+    // Actualizar los datos (teléfonos pueden ser vacíos o null)
     const updatedRequest = await prisma.cashExpressRequest.update({
       where: { id: parseInt(id) },
       data: {
         senderName,
-        senderPhone,
+        senderPhone: senderPhone || null, // Opcional, puede ser null
         recipientName,
-        recipientPhone,
+        recipientPhone: recipientPhone || null, // Opcional, puede ser null
         relationship
       },
       include: {
