@@ -200,16 +200,22 @@ enum UserRole {
   CLIENTE
 }
 
+enum RegistrationSource {
+  WEB
+  APP
+}
+
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String
-  phone     String?
-  password  String // Hash de la contraseña
-  role      UserRole @default(CLIENTE)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 Int                @id @default(autoincrement())
+  email              String              @unique
+  name               String
+  phone              String?
+  password           String // Hash de la contraseña
+  role               UserRole            @default(CLIENTE)
+  registrationSource RegistrationSource? // Origen del registro: WEB o APP
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   // Relaciones
   orders              Order[]
@@ -218,6 +224,7 @@ model User {
 
   @@index([email])
   @@index([role])
+  @@index([registrationSource])
 }
 
 // ============================================================

@@ -17,7 +17,7 @@ const generateToken = (userId, role) => {
 // Registrar nuevo usuario
 export const register = async (req, res) => {
   try {
-    const { email, password, name, phone } = req.body;
+    const { email, password, name, phone, registrationSource } = req.body;
 
     // Validaciones
     if (!email || !password || !name) {
@@ -29,6 +29,13 @@ export const register = async (req, res) => {
     if (password.length < 6) {
       return res.status(400).json({
         error: 'La contraseña debe tener al menos 6 caracteres'
+      });
+    }
+
+    // Validar registrationSource si se proporciona
+    if (registrationSource && !['WEB', 'APP'].includes(registrationSource)) {
+      return res.status(400).json({
+        error: 'registrationSource debe ser WEB o APP'
       });
     }
 
@@ -53,7 +60,8 @@ export const register = async (req, res) => {
         name,
         phone: phone || null,
         password: hashedPassword,
-        role: 'CLIENTE'
+        role: 'CLIENTE',
+        registrationSource: registrationSource || null // WEB o APP, o null si no se especifica
       },
       select: {
         id: true,
@@ -61,6 +69,7 @@ export const register = async (req, res) => {
         name: true,
         phone: true,
         role: true,
+        registrationSource: true,
         createdAt: true
       }
     });
@@ -128,7 +137,8 @@ export const login = async (req, res) => {
         email: user.email,
         name: user.name,
         phone: user.phone,
-        role: user.role
+        role: user.role,
+        registrationSource: user.registrationSource
       },
       token
     });
@@ -163,6 +173,7 @@ export const verifyToken = async (req, res) => {
         name: true,
         phone: true,
         role: true,
+        registrationSource: true,
         isActive: true,
         createdAt: true
       }
@@ -205,6 +216,7 @@ export const getProfile = async (req, res) => {
         name: true,
         phone: true,
         role: true,
+        registrationSource: true,
         createdAt: true
       }
     });
