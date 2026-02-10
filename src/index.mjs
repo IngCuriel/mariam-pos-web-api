@@ -62,13 +62,15 @@ import authRouter from "./routes/auth.js";
 import cashExpressRouter from "./routes/cashExpress.js";
 import ordersRouter from "./routes/orders.js";
 import cloudinaryRouter from "./routes/cloudinary.js";
+import notificationsRouter from "./routes/notifications.js";
  
 app.use("/api/sales", salesRouter);
 app.use("/api/products", productsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/cash-express", cashExpressRouter);
 app.use("/api/orders", ordersRouter);
-app.use("/api/cloudinary", cloudinaryRouter); 
+app.use("/api/cloudinary", cloudinaryRouter);
+app.use("/api/notifications", notificationsRouter); 
 // -------------------
 // Iniciar servidor
 // -------------------

@@ -221,6 +221,7 @@ model User {
   orders              Order[]
   cashExpressRequests CashExpressRequest[]
   balanceHistory      CashExpressBalanceHistory[]
+  notifications       Notification[]
 
   @@index([email])
   @@index([role])
@@ -409,4 +410,43 @@ model CashExpressRequest {
   @@index([userId])
   @@index([status])
   @@index([folio])
+}
+
+// ============================================================
+// 🔔 MÓDULO DE NOTIFICACIONES
+// ============================================================
+
+model Notification {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Tipo de notificación
+  type        String    // 'cash_express' o 'order'
+  entityId    Int       // ID de la solicitud o pedido
+  
+  // Información de la notificación
+  title       String
+  message     String
+  action      String?   // Descripción de qué hacer
+  
+  // Estado
+  status      String    // Estado actual (PENDIENTE, CONFIRMADO, etc.)
+  previousStatus String? // Estado anterior
+  
+  // Leído
+  read        Boolean   @default(false)
+  readAt      DateTime?
+  
+  // Expiración
+  expiresAt   DateTime  // Fecha de expiración (1 día si leída, 5 días si no)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([read])
+  @@index([expiresAt])
+  @@index([type, entityId])
+  @@index([createdAt])
 }

@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { createStatusChangeNotification } from './notificationsController.js';
 
 const prisma = new PrismaClient();
 
@@ -177,6 +178,18 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
+    // Obtener el pedido actual para comparar estados
+    const currentOrder = await prisma.order.findUnique({
+      where: { id: parseInt(id) },
+      select: { status: true, userId: true }
+    });
+
+    if (!currentOrder) {
+      return res.status(404).json({
+        error: 'Pedido no encontrado'
+      });
+    }
+
     const order = await prisma.order.update({
       where: { id: parseInt(id) },
       data: { status },
@@ -197,6 +210,17 @@ export const updateOrderStatus = async (req, res) => {
         }
       }
     });
+
+    // Crear notificación si el estado cambió
+    if (currentOrder.status !== status) {
+      await createStatusChangeNotification(
+        currentOrder.userId,
+        'order',
+        parseInt(id),
+        status,
+        currentOrder.status
+      );
+    }
 
     res.json({
       message: 'Estado actualizado exitosamente',

@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { createStatusChangeNotification } from './notificationsController.js';
 
 const prisma = new PrismaClient();
 
@@ -353,6 +354,17 @@ export const updateRequestStatus = async (req, res) => {
       }
     });
 
+    // Crear notificación si el estado cambió
+    if (currentRequest.status !== status) {
+      await createStatusChangeNotification(
+        currentRequest.userId,
+        'cash_express',
+        parseInt(id),
+        status,
+        currentRequest.status
+      );
+    }
+
     res.json({
       message: 'Estado actualizado exitosamente',
       request
@@ -545,6 +557,7 @@ export const confirmDepositReceipt = async (req, res) => {
     }
 
     // Cambiar estado a "En espera de confirmación" y guardar fecha de envío
+    const previousStatus = request.status;
     const updatedRequest = await prisma.cashExpressRequest.update({
       where: { id: parseInt(id) },
       data: {
@@ -562,6 +575,17 @@ export const confirmDepositReceipt = async (req, res) => {
         }
       }
     });
+
+    // Crear notificación si el estado cambió
+    if (previousStatus !== 'EN_ESPERA_CONFIRMACION') {
+      await createStatusChangeNotification(
+        userId,
+        'cash_express',
+        parseInt(id),
+        'EN_ESPERA_CONFIRMACION',
+        previousStatus
+      );
+    }
 
     res.json({
       message: 'Comprobante enviado a revisión exitosamente',
