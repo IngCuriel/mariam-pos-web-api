@@ -3,11 +3,12 @@ import { createStatusChangeNotification } from './notificationsController.js';
 
 const prisma = new PrismaClient();
 
-// Generar folio único
-const generateFolio = () => {
-  const timestamp = Date.now().toString(36).toUpperCase();
-  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return `CE-${timestamp}-${random}`;
+// Generar folio único usando el ID de la solicitud + 5 números aleatorios
+// Formato: RET-ID-XXXXX (donde ID es el ID de la solicitud y XXXXX son 5 dígitos aleatorios)
+const generateFolio = (requestId) => {
+  // Generar 5 números aleatorios (10000-99999)
+  const randomNumbers = Math.floor(10000 + Math.random() * 90000);
+  return `RET-${requestId}-${randomNumbers}`;
 };
 
 // Crear solicitud de efectivo express
@@ -75,10 +76,9 @@ export const createRequest = async (req, res) => {
     const availabilityResult = await calculateAvailabilityDate(parseFloat(amount));
     const estimatedDeliveryDate = availabilityResult ? availabilityResult.date : null;
 
-    // Crear solicitud (solo con el monto)
+    // Crear solicitud primero (sin folio)
     const request = await prisma.cashExpressRequest.create({
       data: {
-        folio: generateFolio(),
         amount: parseFloat(amount),
         commission,
         totalToDeposit,
@@ -93,9 +93,18 @@ export const createRequest = async (req, res) => {
       }
     });
 
+    // Generar folio único usando el ID de la solicitud + 5 números aleatorios
+    const folio = generateFolio(request.id);
+
+    // Actualizar la solicitud con el folio
+    const updatedRequest = await prisma.cashExpressRequest.update({
+      where: { id: request.id },
+      data: { folio }
+    });
+
     res.status(201).json({
       message: 'Solicitud creada exitosamente',
-      request
+      request: updatedRequest
     });
   } catch (error) {
     console.error('Error creando solicitud:', error);
