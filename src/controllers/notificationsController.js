@@ -18,12 +18,12 @@ const STATUS_MESSAGES = {
   CASH_EXPRESS_REBOTADO: {
     title: 'Depósito Rechazado',
     message: 'Tu depósito fue rechazado. Verifica los datos.',
-    action: 'Revisa los detalles y contacta con soporte.',
+    action: 'Ver motivo de rechazo y corrige los datos necesarios.',
   },
   CASH_EXPRESS_DEPOSITO_VALIDADO: {
     title: 'Depósito Validado',
     message: 'Tu depósito ha sido validado exitosamente.',
-    action: 'Tu solicitud está siendo procesada.',
+    action: 'Ver instrucciones  para retirar el dinero',
   },
   CASH_EXPRESS_ENTREGADO: {
     title: 'Solicitud Entregada',
