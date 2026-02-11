@@ -115,18 +115,21 @@ export const createStatusChangeNotification = async (userId, type, entityId, sta
 };
 
 /**
- * Obtener notificaciones del usuario
+ * Obtener notificaciones del usuario (solo las visibles; no se eliminan de la BD)
+ * Solo se muestran las no ocultas y de los últimos 30 días.
  */
 export const getNotifications = async (req, res) => {
   try {
     const userId = req.userId;
     const { read, limit = 50 } = req.query;
 
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
     const where = {
       userId,
-      expiresAt: {
-        gt: new Date(), // Solo notificaciones no expiradas
-      },
+      hiddenAt: null, // No mostrar las que el usuario ocultó
+      createdAt: { gte: since }, // Solo últimos 30 días para la lista (no se borran las viejas)
     };
 
     if (read !== undefined) {
@@ -139,15 +142,6 @@ export const getNotifications = async (req, res) => {
       take: parseInt(limit),
     });
 
-    // Limpiar notificaciones expiradas
-    await prisma.notification.deleteMany({
-      where: {
-        expiresAt: {
-          lte: new Date(),
-        },
-      },
-    });
-
     res.json(notifications);
   } catch (error) {
     console.error('Error obteniendo notificaciones:', error);
@@ -158,19 +152,21 @@ export const getNotifications = async (req, res) => {
 };
 
 /**
- * Obtener contador de notificaciones no leídas
+ * Obtener contador de notificaciones no leídas (solo visibles, no ocultas)
  */
 export const getUnreadCount = async (req, res) => {
   try {
     const userId = req.userId;
 
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
     const count = await prisma.notification.count({
       where: {
         userId,
         read: false,
-        expiresAt: {
-          gt: new Date(),
-        },
+        hiddenAt: null,
+        createdAt: { gte: since },
       },
     });
 
@@ -208,17 +204,12 @@ export const markAsRead = async (req, res) => {
       });
     }
 
-    // Si no está leída, actualizar y extender expiración a 1 día
     if (!notification.read) {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 1);
-
       const updated = await prisma.notification.update({
         where: { id: parseInt(id) },
         data: {
           read: true,
           readAt: new Date(),
-          expiresAt,
         },
       });
 
@@ -235,26 +226,25 @@ export const markAsRead = async (req, res) => {
 };
 
 /**
- * Marcar todas las notificaciones como leídas
+ * Marcar todas las notificaciones como leídas (solo las visibles)
  */
 export const markAllAsRead = async (req, res) => {
   try {
     const userId = req.userId;
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 1);
+
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
 
     const result = await prisma.notification.updateMany({
       where: {
         userId,
         read: false,
-        expiresAt: {
-          gt: new Date(),
-        },
+        hiddenAt: null,
+        createdAt: { gte: since },
       },
       data: {
         read: true,
         readAt: new Date(),
-        expiresAt,
       },
     });
 
@@ -271,7 +261,7 @@ export const markAllAsRead = async (req, res) => {
 };
 
 /**
- * Eliminar notificación
+ * Ocultar notificación (no se elimina de la BD, solo deja de mostrarse)
  */
 export const deleteNotification = async (req, res) => {
   try {
@@ -288,24 +278,24 @@ export const deleteNotification = async (req, res) => {
       });
     }
 
-    // Verificar que la notificación pertenece al usuario
     if (notification.userId !== userId) {
       return res.status(403).json({
-        error: 'No tienes permiso para eliminar esta notificación',
+        error: 'No tienes permiso para esta notificación',
       });
     }
 
-    await prisma.notification.delete({
+    await prisma.notification.update({
       where: { id: parseInt(id) },
+      data: { hiddenAt: new Date() },
     });
 
     res.json({
-      message: 'Notificación eliminada',
+      message: 'Notificación ocultada',
     });
   } catch (error) {
-    console.error('Error eliminando notificación:', error);
+    console.error('Error ocultando notificación:', error);
     res.status(500).json({
-      error: 'Error al eliminar notificación',
+      error: 'Error al ocultar notificación',
     });
   }
 };

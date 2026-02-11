@@ -438,7 +438,10 @@ model Notification {
   read        Boolean   @default(false)
   readAt      DateTime?
   
-  // Expiración
+  // Ocultar (el usuario la oculta pero no se elimina de la BD)
+  hiddenAt    DateTime?
+  
+  // Expiración (solo informativa; ya no se usa para eliminar)
   expiresAt   DateTime  // Fecha de expiración (1 día si leída, 5 días si no)
   
   createdAt   DateTime  @default(now())
@@ -446,6 +449,7 @@ model Notification {
 
   @@index([userId])
   @@index([read])
+  @@index([hiddenAt])
   @@index([expiresAt])
   @@index([type, entityId])
   @@index([createdAt])
