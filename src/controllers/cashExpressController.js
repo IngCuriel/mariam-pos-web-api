@@ -119,11 +119,21 @@ export const getRequests = async (req, res) => {
   try {
     const userId = req.userId;
     const userRole = req.userRole;
-    const { status } = req.query;
+    const { status, search } = req.query;
+    const searchTrimmed = typeof search === 'string' ? search.trim() : '';
+    const idNum = searchTrimmed && /^\d+$/.test(searchTrimmed) ? parseInt(searchTrimmed, 10) : undefined;
 
     const where = {
       ...(userRole === 'CLIENTE' ? { userId } : {}), // Clientes solo ven las suyas
-      ...(status ? { status } : {})
+      ...(status ? { status } : {}),
+      ...(searchTrimmed
+        ? {
+            OR: [
+              { folio: { contains: searchTrimmed, mode: 'insensitive' } },
+              ...(idNum !== undefined ? [{ id: idNum }] : [])
+            ]
+          }
+        : {})
     };
 
     const requests = await prisma.cashExpressRequest.findMany({
