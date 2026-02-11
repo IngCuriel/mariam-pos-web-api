@@ -126,10 +126,11 @@ export const getRequests = async (req, res) => {
     const where = {
       ...(userRole === 'CLIENTE' ? { userId } : {}), // Clientes solo ven las suyas
       ...(status ? { status } : {}),
+      // Búsqueda por folio o ID: coincidencia exacta (un solo resultado o ninguno)
       ...(searchTrimmed
         ? {
             OR: [
-              { folio: { contains: searchTrimmed, mode: 'insensitive' } },
+              { folio: { equals: searchTrimmed, mode: 'insensitive' } },
               ...(idNum !== undefined ? [{ id: idNum }] : [])
             ]
           }
