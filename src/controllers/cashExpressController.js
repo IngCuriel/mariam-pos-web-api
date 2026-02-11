@@ -117,23 +117,29 @@ export const createRequest = async (req, res) => {
 // En proceso: Pendiente de depósito, En revisión, Rechazado, Liberado para entrega
 const EN_PROCESO_STATUSES = ['PENDIENTE', 'EN_ESPERA_CONFIRMACION', 'REBOTADO', 'DEPOSITO_VALIDADO'];
 
-// Obtener solicitudes: solo ADMIN ve todas; CLIENTE solo las suyas
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
+
+// Obtener solicitudes: solo ADMIN ve todas; CLIENTE solo las suyas. Paginado.
 export const getRequests = async (req, res) => {
   try {
     const userId = req.userId;
     const userRole = req.userRole;
-    const { status, search } = req.query;
+    const { status, search, page: pageParam, limit: limitParam } = req.query;
     const searchTrimmed = typeof search === 'string' ? search.trim() : '';
     const idNum = searchTrimmed && /^\d+$/.test(searchTrimmed) ? parseInt(searchTrimmed, 10) : undefined;
+    const page = Math.max(1, parseInt(pageParam, 10) || 1);
+    let limit = parseInt(limitParam, 10) || DEFAULT_PAGE_SIZE;
+    limit = Math.min(MAX_PAGE_SIZE, Math.max(1, limit));
+    const skip = (page - 1) * limit;
 
     if (userRole !== 'ADMIN' && userRole !== 'CLIENTE') {
       return res.status(403).json({ error: 'No tiene permiso para acceder a esta sección.' });
     }
 
-    // Solo ADMIN ve todos los folios; CLIENTE solo los suyos
     const baseWhere = userRole === 'ADMIN' ? {} : { userId };
 
-    // Búsqueda por folio: no aplica filtro por status, busca en todos los estados
+    // Búsqueda por folio: no aplica filtro por status, busca en todos los estados (paginado por si acaso)
     if (searchTrimmed) {
       const where = {
         ...baseWhere,
@@ -142,23 +148,33 @@ export const getRequests = async (req, res) => {
           ...(idNum !== undefined ? [{ id: idNum }] : [])
         ]
       };
-      const requests = await prisma.cashExpressRequest.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true
+      const [total, requests] = await Promise.all([
+        prisma.cashExpressRequest.count({ where }),
+        prisma.cashExpressRequest.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
             }
           }
-        }
+        })
+      ]);
+      return res.json({
+        requests,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1
       });
-      return res.json(requests);
     }
 
-    // Filtro por status (a nivel API)
     const statusCondition = !status
       ? {}
       : status === 'EN_PROCESO'
@@ -170,21 +186,32 @@ export const getRequests = async (req, res) => {
       ...statusCondition
     };
 
-    const requests = await prisma.cashExpressRequest.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true
+    const [total, requests] = await Promise.all([
+      prisma.cashExpressRequest.count({ where }),
+      prisma.cashExpressRequest.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
           }
         }
-      }
-    });
+      })
+    ]);
 
-    res.json(requests);
+    res.json({
+      requests,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1
+    });
   } catch (error) {
     console.error('Error obteniendo solicitudes:', error);
     res.status(500).json({
