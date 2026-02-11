@@ -114,7 +114,10 @@ export const createRequest = async (req, res) => {
   }
 };
 
-// Obtener solicitudes del usuario (o todas si es admin)
+// En proceso: Pendiente de depósito, En revisión, Rechazado, Liberado para entrega
+const EN_PROCESO_STATUSES = ['PENDIENTE', 'EN_ESPERA_CONFIRMACION', 'REBOTADO', 'DEPOSITO_VALIDADO'];
+
+// Obtener solicitudes: solo ADMIN ve todas; CLIENTE solo las suyas
 export const getRequests = async (req, res) => {
   try {
     const userId = req.userId;
@@ -123,18 +126,48 @@ export const getRequests = async (req, res) => {
     const searchTrimmed = typeof search === 'string' ? search.trim() : '';
     const idNum = searchTrimmed && /^\d+$/.test(searchTrimmed) ? parseInt(searchTrimmed, 10) : undefined;
 
-    const where = {
-      ...(userRole === 'CLIENTE' ? { userId } : {}), // Clientes solo ven las suyas
-      ...(status ? { status } : {}),
-      // Búsqueda por folio o ID: coincidencia exacta (un solo resultado o ninguno)
-      ...(searchTrimmed
-        ? {
-            OR: [
-              { folio: { equals: searchTrimmed, mode: 'insensitive' } },
-              ...(idNum !== undefined ? [{ id: idNum }] : [])
-            ]
+    if (userRole !== 'ADMIN' && userRole !== 'CLIENTE') {
+      return res.status(403).json({ error: 'No tiene permiso para acceder a esta sección.' });
+    }
+
+    // Solo ADMIN ve todos los folios; CLIENTE solo los suyos
+    const baseWhere = userRole === 'ADMIN' ? {} : { userId };
+
+    // Búsqueda por folio: no aplica filtro por status, busca en todos los estados
+    if (searchTrimmed) {
+      const where = {
+        ...baseWhere,
+        OR: [
+          { folio: { equals: searchTrimmed, mode: 'insensitive' } },
+          ...(idNum !== undefined ? [{ id: idNum }] : [])
+        ]
+      };
+      const requests = await prisma.cashExpressRequest.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
           }
-        : {})
+        }
+      });
+      return res.json(requests);
+    }
+
+    // Filtro por status (a nivel API)
+    const statusCondition = !status
+      ? {}
+      : status === 'EN_PROCESO'
+        ? { status: { in: EN_PROCESO_STATUSES } }
+        : { status };
+
+    const where = {
+      ...baseWhere,
+      ...statusCondition
     };
 
     const requests = await prisma.cashExpressRequest.findMany({
