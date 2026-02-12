@@ -84,7 +84,8 @@ export async function reviewAvailability(orderId, itemsPayload) {
 
     const newTotal = updatedItems.reduce((sum, i) => sum + i.subtotal, 0);
     const allAvailable = updatedItems.every((i) => i.isAvailable === true && (i.confirmedQuantity ?? i.quantity) >= i.quantity);
-    const newStatus = allAvailable ? OrderStatus.AVAILABLE : OrderStatus.PARTIALLY_AVAILABLE;
+    // Si todo está disponible, pasar directo a En preparación (una sola notificación, sin "todo disponible")
+    const newStatus = allAvailable ? OrderStatus.IN_PREPARATION : OrderStatus.PARTIALLY_AVAILABLE;
 
     await tx.order.update({
       where: { id },
