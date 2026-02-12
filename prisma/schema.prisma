@@ -229,30 +229,34 @@ model User {
 }
 
 // ============================================================
-// 📦 MÓDULO DE PEDIDOS (ORDERS)
+// 📦 MÓDULO DE PEDIDOS (ORDERS) - Flujo recoger en tienda
 // ============================================================
 
 enum OrderStatus {
-  PENDIENTE
-  CONFIRMADO
-  EN_PREPARACION
-  LISTO
-  ENTREGADO
-  CANCELADO
+  CREATED              // Recién creado (opcional, puede usarse UNDER_REVIEW directo)
+  UNDER_REVIEW         // Admin revisando disponibilidad
+  PARTIALLY_AVAILABLE  // Revisado, falta al menos un producto
+  AVAILABLE            // Todo disponible
+  IN_PREPARATION       // Cliente aceptó; en preparación
+  READY_FOR_PICKUP     // Listo para recoger en sucursal
+  COMPLETED            // Entregado/recogido
+  CANCELLED            // Cancelado
 }
 
 model Order {
-  id        Int         @id @default(autoincrement())
-  folio     String?     @unique
-  total     Float
-  status    OrderStatus @default(PENDIENTE)
-  notes     String?
-  userId    Int
-  user      User        @relation(fields: [userId], references: [id])
-  branchId  Int?
-  branch    Branch?     @relation(fields: [branchId], references: [id])
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id          Int          @id @default(autoincrement())
+  folio       String?      @unique
+  total       Float
+  status      OrderStatus  @default(UNDER_REVIEW)
+  notes       String?
+  userId      Int
+  user        User         @relation(fields: [userId], references: [id])
+  branchId    Int?
+  branch      Branch?      @relation(fields: [branchId], references: [id])
+  confirmedAt DateTime?    // Cuando el cliente acepta pedido actualizado
+  readyAt     DateTime?    // Cuando admin marca "listo para recoger"
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   items OrderItem[]
 
@@ -262,16 +266,17 @@ model Order {
 }
 
 model OrderItem {
-  id          Int      @id @default(autoincrement())
-  orderId     Int
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId   Int
-  productName String
-  quantity    Int
-  unitPrice   Float
-  subtotal    Float
-  isAvailable Boolean? // null = no revisado, true = disponible, false = no disponible
-  createdAt   DateTime @default(now())
+  id                Int      @id @default(autoincrement())
+  orderId           Int
+  order             Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId         Int
+  productName       String
+  quantity          Int       // Cantidad solicitada
+  confirmedQuantity Int?      // Cantidad confirmada por admin (<= quantity)
+  unitPrice         Float
+  subtotal          Float    // Subtotal según cantidad solicitada (se recalcula al confirmar)
+  isAvailable       Boolean?  // null = no revisado, true = disponible, false = no disponible
+  createdAt         DateTime  @default(now())
 
   @@index([orderId])
 }

@@ -35,34 +35,75 @@ const STATUS_MESSAGES = {
     message: 'Tu solicitud ha sido cancelada.',
     action: 'Contacta con soporte si tienes dudas.',
   },
-  // Orders
+  // Orders (flujo recoger en tienda)
+  ORDER_CREATED: {
+    title: 'Pedido Creado',
+    message: 'Tu pedido ha sido registrado.',
+    action: 'Revisa el estado en Mis pedidos.',
+  },
+  ORDER_UNDER_REVIEW: {
+    title: 'Revisando tu pedido',
+    message: 'Estamos revisando la disponibilidad de tus productos.',
+    action: 'Te notificaremos cuando esté revisado.',
+  },
+  ORDER_PARTIALLY_AVAILABLE: {
+    title: 'Pedido revisado (productos no disponibles)',
+    message: 'Algunos productos no están disponibles. Revisa el total actualizado y acepta o cancela.',
+    action: 'Acepta el pedido actualizado o cancela.',
+  },
+  ORDER_AVAILABLE: {
+    title: 'Todo disponible',
+    message: 'Todos tus productos están disponibles. Confirma para que preparemos tu pedido.',
+    action: 'Acepta el pedido para continuar.',
+  },
+  ORDER_IN_PREPARATION: {
+    title: 'Pedido en preparación',
+    message: 'Tu pedido está siendo preparado.',
+    action: 'Te avisaremos cuando esté listo para recoger.',
+  },
+  ORDER_READY_FOR_PICKUP: {
+    title: '¡Listo para recoger!',
+    message: 'Tu pedido ya está listo para recoger en sucursal.',
+    action: 'Ve a la sucursal a recoger tu pedido.',
+  },
+  ORDER_COMPLETED: {
+    title: 'Pedido completado',
+    message: 'Tu pedido ha sido entregado.',
+    action: 'Gracias por tu compra.',
+  },
+  ORDER_CANCELLED: {
+    title: 'Pedido cancelado',
+    message: 'Tu pedido ha sido cancelado.',
+    action: 'Contacta con soporte si tienes dudas.',
+  },
+  // Compatibilidad con nombres antiguos (por si acaso)
   ORDER_PENDIENTE: {
-    title: 'Pedido Pendiente',
-    message: 'Tu pedido está pendiente de confirmación.',
-    action: 'Revisa los detalles de tu pedido.',
+    title: 'Revisando tu pedido',
+    message: 'Estamos revisando la disponibilidad de tus productos.',
+    action: 'Te notificaremos cuando esté revisado.',
   },
   ORDER_CONFIRMADO: {
-    title: 'Pedido Confirmado',
-    message: 'Tu pedido ha sido confirmado.',
-    action: 'Tu pedido está siendo preparado.',
+    title: 'Pedido en preparación',
+    message: 'Tu pedido está siendo preparado.',
+    action: 'Te avisaremos cuando esté listo.',
   },
   ORDER_EN_PREPARACION: {
-    title: 'Pedido en Preparación',
+    title: 'Pedido en preparación',
     message: 'Tu pedido está siendo preparado.',
-    action: 'Pronto estará listo para entrega.',
+    action: 'Te avisaremos cuando esté listo.',
   },
   ORDER_LISTO: {
-    title: 'Pedido Listo',
-    message: 'Tu pedido está listo para recoger.',
+    title: '¡Listo para recoger!',
+    message: 'Tu pedido está listo para recoger en sucursal.',
     action: 'Ve a la sucursal a recoger tu pedido.',
   },
   ORDER_ENTREGADO: {
-    title: 'Pedido Entregado',
-    message: 'Tu pedido ha sido entregado exitosamente.',
+    title: 'Pedido completado',
+    message: 'Tu pedido ha sido entregado.',
     action: 'Gracias por tu compra.',
   },
   ORDER_CANCELADO: {
-    title: 'Pedido Cancelado',
+    title: 'Pedido cancelado',
     message: 'Tu pedido ha sido cancelado.',
     action: 'Contacta con soporte si tienes dudas.',
   },

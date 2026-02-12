@@ -1,5 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { createStatusChangeNotification } from './notificationsController.js';
+import * as orderService from '../services/orderService.js';
+import { OrderStatus } from '../constants/orderStatus.js';
 
 const prisma = new PrismaClient();
 
@@ -30,7 +32,7 @@ export const createOrder = async (req, res) => {
       data: {
         folio: generateFolio(),
         total,
-        status: 'PENDIENTE',
+        status: OrderStatus.UNDER_REVIEW,
         notes: notes || null,
         userId,
         branchId: branchId || null,
@@ -165,20 +167,19 @@ export const getOrderById = async (req, res) => {
   }
 };
 
-// Actualizar estado de pedido (solo admin)
+// Actualizar estado de pedido (solo admin) - uso limitado; preferir endpoints de flujo
 export const updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
-    const validStatuses = ['PENDIENTE', 'CONFIRMADO', 'EN_PREPARACION', 'LISTO', 'ENTREGADO', 'CANCELADO'];
+    const validStatuses = Object.values(OrderStatus);
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         error: 'Estado inválido'
       });
     }
 
-    // Obtener el pedido actual para comparar estados
     const currentOrder = await prisma.order.findUnique({
       where: { id: parseInt(id) },
       select: { status: true, userId: true }
@@ -195,23 +196,11 @@ export const updateOrderStatus = async (req, res) => {
       data: { status },
       include: {
         items: true,
-        branch: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        }
+        branch: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true, email: true } }
       }
     });
 
-    // Crear notificación si el estado cambió
     if (currentOrder.status !== status) {
       await createStatusChangeNotification(
         currentOrder.userId,
@@ -258,9 +247,9 @@ export const updateOrderItemsAvailability = async (req, res) => {
       });
     }
 
-    if (order.status !== 'PENDIENTE') {
+    if (order.status !== OrderStatus.UNDER_REVIEW) {
       return res.status(400).json({
-        error: 'Solo se puede actualizar la disponibilidad de items cuando el pedido está en estado PENDIENTE'
+        error: 'Solo se puede actualizar la disponibilidad cuando el pedido está en revisión'
       });
     }
 
@@ -275,7 +264,7 @@ export const updateOrderItemsAvailability = async (req, res) => {
       return prisma.orderItem.update({
         where: { id: itemId },
         data: { isAvailable }
-      });
+      }); // confirmedQuantity y subtotal se fijan al "Confirmar disponibilidad"
     });
 
     await Promise.all(updatePromises);
@@ -309,6 +298,78 @@ export const updateOrderItemsAvailability = async (req, res) => {
     console.error('Error actualizando disponibilidad de items:', error);
     res.status(500).json({
       error: error.message || 'Error al actualizar disponibilidad de items'
+    });
+  }
+};
+
+// Confirmar disponibilidad (admin): recalcula total y pasa a AVAILABLE o PARTIALLY_AVAILABLE
+export const confirmOrderAvailability = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { items } = req.body;
+    const order = await orderService.reviewAvailability(id, items);
+    res.json({
+      message: 'Disponibilidad confirmada. El cliente ha sido notificado.',
+      order
+    });
+  } catch (error) {
+    const code = error.statusCode || 500;
+    res.status(code).json({
+      error: error.message || 'Error al confirmar disponibilidad'
+    });
+  }
+};
+
+// Cliente acepta pedido actualizado -> IN_PREPARATION
+export const confirmOrderByCustomer = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.userId;
+    const order = await orderService.confirmByCustomer(id, userId);
+    res.json({
+      message: 'Pedido aceptado. Estamos preparando tu pedido.',
+      order
+    });
+  } catch (error) {
+    const code = error.statusCode || 500;
+    res.status(code).json({
+      error: error.message || 'Error al aceptar el pedido'
+    });
+  }
+};
+
+// Admin marca como listo para recoger -> READY_FOR_PICKUP
+export const markOrderReady = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await orderService.markAsReady(id);
+    res.json({
+      message: 'Pedido marcado como listo para recoger.',
+      order
+    });
+  } catch (error) {
+    const code = error.statusCode || 500;
+    res.status(code).json({
+      error: error.message || 'Error al marcar como listo'
+    });
+  }
+};
+
+// Cancelar pedido (cliente o admin)
+export const cancelOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.userId;
+    const isAdmin = req.userRole === 'ADMIN';
+    const order = await orderService.cancelOrder(id, userId, isAdmin);
+    res.json({
+      message: 'Pedido cancelado.',
+      order
+    });
+  } catch (error) {
+    const code = error.statusCode || 500;
+    res.status(code).json({
+      error: error.message || 'Error al cancelar el pedido'
     });
   }
 };
