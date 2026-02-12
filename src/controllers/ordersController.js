@@ -76,6 +76,40 @@ export const createOrder = async (req, res) => {
   }
 };
 
+// Conteos por estado (solo admin) para el panel de seguimiento
+export const getOrderCounts = async (req, res) => {
+  try {
+    const userRole = req.userRole;
+    if (userRole !== 'ADMIN') {
+      return res.status(403).json({ error: 'Solo administradores pueden ver los conteos' });
+    }
+
+    const counts = await prisma.order.groupBy({
+      by: ['status'],
+      _count: { id: true },
+      where: {},
+    });
+
+    const countByStatus = counts.reduce((acc, row) => {
+      acc[row.status] = row._count.id;
+      return acc;
+    }, {});
+
+    const allStatuses = Object.values(OrderStatus);
+    const result = {};
+    let total = 0;
+    for (const s of allStatuses) {
+      result[s] = countByStatus[s] || 0;
+      total += result[s];
+    }
+
+    res.json({ counts: result, total });
+  } catch (error) {
+    console.error('Error obteniendo conteos:', error);
+    res.status(500).json({ error: 'Error al obtener conteos' });
+  }
+};
+
 // Obtener pedidos del usuario (o todas si es admin) con paginación
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;

@@ -3,6 +3,7 @@ import {
   createOrder,
   getOrders,
   getOrderById,
+  getOrderCounts,
   updateOrderStatus,
   updateOrderItemsAvailability,
   confirmOrderAvailability,
@@ -19,6 +20,7 @@ router.use(authenticate);
 // Cliente y admin
 router.post('/', createOrder);
 router.get('/', getOrders);
+router.get('/counts', requireAdmin, getOrderCounts);
 router.get('/:id', getOrderById);
 
 // Admin: revisión y disponibilidad
