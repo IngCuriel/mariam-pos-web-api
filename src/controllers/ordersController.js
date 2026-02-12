@@ -76,40 +76,65 @@ export const createOrder = async (req, res) => {
   }
 };
 
-// Obtener pedidos del usuario (o todas si es admin)
+// Obtener pedidos del usuario (o todas si es admin) con paginación
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 50;
+
 export const getOrders = async (req, res) => {
   try {
     const userId = req.userId;
     const userRole = req.userRole;
-    const { status } = req.query;
+    const { status, page: pageStr, limit: limitStr } = req.query;
+
+    const page = Math.max(1, parseInt(pageStr, 10) || 1);
+    let limit = parseInt(limitStr, 10) || DEFAULT_LIMIT;
+    limit = Math.min(MAX_LIMIT, Math.max(1, limit));
+    const skip = (page - 1) * limit;
 
     const where = {
-      ...(userRole === 'CLIENTE' ? { userId } : {}), // Clientes solo ven las suyas
+      ...(userRole === 'CLIENTE' ? { userId } : {}),
       ...(status ? { status } : {})
     };
 
-    const orders = await prisma.order.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        items: true,
-        branch: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          items: true,
+          branch: {
+            select: {
+              id: true,
+              name: true
+            }
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
           }
         }
+      }),
+      prisma.order.count({ where })
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    res.json({
+      orders,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
       }
     });
-
-    res.json(orders);
   } catch (error) {
     console.error('Error obteniendo pedidos:', error);
     res.status(500).json({
