@@ -95,7 +95,8 @@ model Product {
   code           String?
   name           String
   status         Int?
-  saleType       String?
+  saleType       String?   // Tipo de venta comercial (ej. menudeo, mayoreo) — independiente de tipoEnvio
+  tipoEnvio      String?   // Solo forma de entrega: SOBRE_PEDIDO | SOLO_TIENDA | ENVIO_INMEDIATO (tienda online)
   price          Float
   cost           Float?
   description    String?

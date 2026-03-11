@@ -3,6 +3,14 @@ import { getOrCreateBranch, getAllBranchesForAdmin, updateBranch as updateBranch
 import { assignEmojiToProduct } from '../services/emojiService.js';
 const prisma = new PrismaClient();
 
+/** Valores permitidos para tipoEnvio (validaciones tienda online) */
+const TIPO_ENVIO_VALUES = ['SOBRE_PEDIDO', 'SOLO_TIENDA', 'ENVIO_INMEDIATO'];
+
+function normalizeTipoEnvio(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  return TIPO_ENVIO_VALUES.includes(value) ? value : null;
+}
+
 /** Normaliza features a array de strings para guardar en Json, o null si está vacío */
 function normalizeFeatures(features) {
   if (features == null) return null;
@@ -33,6 +41,7 @@ export const createProductsBulk = async (req, res) => {
           name,
           status,
           saleType,
+          tipoEnvio,
           price,
           cost,
           description,
@@ -48,6 +57,8 @@ export const createProductsBulk = async (req, res) => {
           inventory,
           kitItems = []
         } = productData;
+        // tipoEnvio y saleType son independientes: tipoEnvio = forma de entrega; saleType = tipo de venta comercial
+        const finalTipoEnvio = normalizeTipoEnvio(tipoEnvio);
 
         // 0. Obtener o crear sucursal PRIMERO (antes de usarla)
         const branchObj = await getOrCreateBranch(branch || "Sucursal Default");
@@ -144,6 +155,7 @@ export const createProductsBulk = async (req, res) => {
               name,
               status,
               saleType,
+              tipoEnvio: finalTipoEnvio,
               price,
               cost,
               description,
@@ -166,6 +178,7 @@ export const createProductsBulk = async (req, res) => {
                 name,
                 status,
                 saleType,
+                tipoEnvio: finalTipoEnvio,
                 price,
                 cost,
                 description,
@@ -1030,6 +1043,36 @@ export const updateProductFeatures = async (req, res) => {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
     console.error('Error actualizando características:', error);
+    res.status(500).json({ error: 'Error actualizando producto' });
+  }
+};
+
+// Actualizar solo tipoEnvio (forma de entrega: SOBRE_PEDIDO | SOLO_TIENDA | ENVIO_INMEDIATO). No modifica saleType.
+export const updateProductTipoEnvio = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tipoEnvio } = req.body;
+
+    const value = normalizeTipoEnvio(tipoEnvio);
+
+    const updatedProduct = await prisma.product.update({
+      where: { id: Number.parseInt(id, 10) },
+      data: { tipoEnvio: value },
+      include: {
+        category: { select: { id: true, name: true } },
+        images: { orderBy: { displayOrder: 'asc' } },
+      },
+    });
+
+    res.json({
+      message: 'Tipo de envío actualizado',
+      product: updatedProduct,
+    });
+  } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+    console.error('Error actualizando tipo de envío:', error);
     res.status(500).json({ error: 'Error actualizando producto' });
   }
 };
