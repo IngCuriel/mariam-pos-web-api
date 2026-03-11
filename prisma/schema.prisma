@@ -99,6 +99,7 @@ model Product {
   price          Float
   cost           Float?
   description    String?
+  features       Json?    // Lista de características para la tienda online (array de strings)
   icon           String?
   trackInventory Boolean? @default(false)
   isKit          Boolean  @default(false)

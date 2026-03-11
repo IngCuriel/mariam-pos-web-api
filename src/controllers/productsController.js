@@ -3,6 +3,16 @@ import { getOrCreateBranch, getAllBranchesForAdmin, updateBranch as updateBranch
 import { assignEmojiToProduct } from '../services/emojiService.js';
 const prisma = new PrismaClient();
 
+/** Normaliza features a array de strings para guardar en Json, o null si está vacío */
+function normalizeFeatures(features) {
+  if (features == null) return null;
+  const arr = Array.isArray(features)
+    ? features
+    : (typeof features === 'string' ? features.split('\n').map((s) => s.trim()).filter(Boolean) : []);
+  const strings = arr.map((item) => (typeof item === 'string' ? item.trim() : String(item))).filter(Boolean);
+  return strings.length === 0 ? null : strings;
+}
+
 // Crear productos en bulk (con categorías, presentaciones e inventario)
 export const createProductsBulk = async (req, res) => {
   try {
@@ -26,6 +36,7 @@ export const createProductsBulk = async (req, res) => {
           price,
           cost,
           description,
+          features,
           icon,
           categoryId,
           trackInventory,
@@ -136,6 +147,7 @@ export const createProductsBulk = async (req, res) => {
               price,
               cost,
               description,
+              features: normalizeFeatures(features),
               icon: finalIcon,
               categoryId: finalCategoryId,
               trackInventory: trackInventory || false,
@@ -157,6 +169,7 @@ export const createProductsBulk = async (req, res) => {
                 price,
                 cost,
                 description,
+                features: normalizeFeatures(features),
                 icon: finalIcon,
                 categoryId: finalCategoryId,
                 trackInventory: trackInventory || false,
@@ -987,6 +1000,36 @@ export const updateProductVisibility = async (req, res) => {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
     console.error('Error actualizando visibilidad del producto:', error);
+    res.status(500).json({ error: 'Error actualizando producto' });
+  }
+};
+
+// Actualizar características (lista) de un producto (solo admin)
+export const updateProductFeatures = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { features } = req.body;
+
+    const value = normalizeFeatures(features);
+
+    const updatedProduct = await prisma.product.update({
+      where: { id: Number.parseInt(id, 10) },
+      data: { features: value },
+      include: {
+        category: { select: { id: true, name: true } },
+        images: { orderBy: { displayOrder: 'asc' } },
+      },
+    });
+
+    res.json({
+      message: 'Características actualizadas',
+      product: updatedProduct,
+    });
+  } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+    console.error('Error actualizando características:', error);
     res.status(500).json({ error: 'Error actualizando producto' });
   }
 };

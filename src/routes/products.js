@@ -12,6 +12,7 @@ import {
   getCategoriesForConfig,
   getProductsByCategoryForConfig,
   updateProductVisibility,
+  updateProductFeatures,
   addProductImage,
   deleteProductImage,
   reorderProductImages,
@@ -41,6 +42,7 @@ router.patch("/categories/:id", authenticate, requireAdmin, updateCategory); // 
 router.get("/config/categories", authenticate, requireAdmin, getCategoriesForConfig); // Obtener solo categorías visibles
 router.get("/config/category/:categoryId/products", authenticate, requireAdmin, getProductsByCategoryForConfig); // Obtener productos de una categoría
 router.patch("/:id/visibility", authenticate, requireAdmin, updateProductVisibility); // Actualizar visibilidad del producto
+router.patch("/:id/features", authenticate, requireAdmin, updateProductFeatures); // Actualizar características (lista) del producto
 router.post("/:id/images", authenticate, requireAdmin, addProductImage); // Agregar imagen al producto
 router.delete("/:id/images/:imageId", authenticate, requireAdmin, deleteProductImage); // Eliminar imagen del producto
 router.patch("/:id/images/reorder", authenticate, requireAdmin, reorderProductImages); // Reordenar imágenes
