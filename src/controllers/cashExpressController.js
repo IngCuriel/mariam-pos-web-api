@@ -104,13 +104,41 @@ export const createRequest = async (req, res) => {
       data: { folio, depositDeadline }
     });
 
-    // Apartar saldo: incrementar reservedBalance para esta solicitud
+    // Apartar saldo: descontar del disponible y registrar como salida
     config = await prisma.cashExpressConfig.findFirst();
     if (config) {
+      const previousAvailable = config.availableBalance || 0;
       const currentReserved = config.reservedBalance || 0;
+      const amountNum = parseFloat(amount);
+
+      if (previousAvailable < amountNum) {
+        await prisma.cashExpressRequest.delete({ where: { id: request.id } }).catch(() => {});
+        return res.status(400).json({
+          error: `Saldo disponible insuficiente. Disponible: ${previousAvailable.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}, Monto: ${amountNum.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}`
+        });
+      }
+
+      const newAvailable = previousAvailable - amountNum;
+      const newReserved = currentReserved + amountNum;
+
       await prisma.cashExpressConfig.update({
         where: { id: config.id },
-        data: { reservedBalance: currentReserved + parseFloat(amount) }
+        data: {
+          availableBalance: newAvailable,
+          reservedBalance: newReserved
+        }
+      });
+
+      await prisma.cashExpressBalanceHistory.create({
+        data: {
+          amount: -amountNum,
+          description: `Apartado - Solicitud ${folio}`,
+          previousBalance: previousAvailable,
+          newBalance: newAvailable,
+          userId: req.userId,
+          cashExpressConfigId: config.id,
+          cashExpressRequestId: updatedRequest.id
+        }
       });
     }
 
@@ -375,7 +403,7 @@ export const updateRequestStatus = async (req, res) => {
       }
     }
 
-    // Si se está marcando como ENTREGADO, descontar del saldo disponible y liberar apartado
+    // Si se está marcando como ENTREGADO, solo liberar el apartado (el saldo ya se descontó al apartar)
     if (status === 'ENTREGADO' && currentRequest.status !== 'ENTREGADO') {
       let config = await prisma.cashExpressConfig.findFirst();
       if (!config) {
@@ -384,50 +412,46 @@ export const updateRequestStatus = async (req, res) => {
         });
       }
 
-      const amountToDeduct = currentRequest.amount;
-      const previousBalance = config.availableBalance || 0;
+      const amountToRelease = currentRequest.amount;
       const previousReserved = config.reservedBalance || 0;
-      const newBalance = previousBalance - amountToDeduct;
-      const newReserved = Math.max(0, previousReserved - amountToDeduct);
+      const newReserved = Math.max(0, previousReserved - amountToRelease);
 
-      if (newBalance < 0) {
-        return res.status(400).json({
-          error: `Saldo insuficiente. Saldo actual: ${previousBalance.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}, Monto a entregar: ${amountToDeduct.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}`
-        });
-      }
-
-      config = await prisma.cashExpressConfig.update({
+      await prisma.cashExpressConfig.update({
         where: { id: config.id },
-        data: {
-          availableBalance: newBalance,
-          reservedBalance: newReserved
-        }
-      });
-
-      await prisma.cashExpressBalanceHistory.create({
-        data: {
-          amount: -amountToDeduct,
-          description: `Entrega de efectivo - Solicitud ${currentRequest.folio}`,
-          previousBalance,
-          newBalance,
-          userId: req.userId,
-          cashExpressConfigId: config.id,
-          cashExpressRequestId: parseInt(id)
-        }
+        data: { reservedBalance: newReserved }
       });
     }
 
-    // Si se cancela o se rechaza, liberar el saldo apartado
+    // Si se cancela o se rechaza, devolver el apartado al saldo y registrar abono
     if ((status === 'CANCELADO' || status === 'REBOTADO') && currentRequest.status !== status) {
       const statusesThatReserve = ['PENDIENTE', 'EN_ESPERA_CONFIRMACION', 'DEPOSITO_VALIDADO'];
       if (statusesThatReserve.includes(currentRequest.status)) {
         let config = await prisma.cashExpressConfig.findFirst();
         if (config) {
+          const previousAvailable = config.availableBalance || 0;
           const currentReserved = config.reservedBalance || 0;
-          const newReserved = Math.max(0, currentReserved - currentRequest.amount);
-          await prisma.cashExpressConfig.update({
+          const amountReturn = currentRequest.amount;
+          const newAvailable = previousAvailable + amountReturn;
+          const newReserved = Math.max(0, currentReserved - amountReturn);
+
+          config = await prisma.cashExpressConfig.update({
             where: { id: config.id },
-            data: { reservedBalance: newReserved }
+            data: {
+              availableBalance: newAvailable,
+              reservedBalance: newReserved
+            }
+          });
+
+          await prisma.cashExpressBalanceHistory.create({
+            data: {
+              amount: amountReturn,
+              description: `Abono por liberación de apartado - Solicitud ${currentRequest.folio}`,
+              previousBalance: previousAvailable,
+              newBalance: newAvailable,
+              userId: req.userId,
+              cashExpressConfigId: config.id,
+              cashExpressRequestId: parseInt(id)
+            }
           });
         }
       }
@@ -918,7 +942,8 @@ export const calculateAvailabilityDate = async (amount) => {
 
     const availableBalance = config.availableBalance || 0;
     const reservedBalance = config.reservedBalance || 0;
-    const effectiveAvailable = availableBalance - reservedBalance;
+    // Disponible para nuevas solicitudes = saldo en caja libre (ya se descuenta al apartar)
+    const effectiveAvailable = availableBalance;
     const dailyMinimumDeposit = config.dailyMinimumDeposit || 500;
     const serviceDays = JSON.parse(config.serviceDays || '[1,2,3,4,5]');
     const holidays = JSON.parse(config.holidays || '[]');
