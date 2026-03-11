@@ -506,10 +506,13 @@ export const getProductById = async (req, res) => {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
 
-    // Mapear producto para incluir branch.name como branch para compatibilidad con frontend
+    // branch = nombre (string) para compatibilidad; branchInfo = { name, description } para detalle (ej. dirección)
     const productWithBranch = {
       ...product,
-      branch: product.branch?.name || null
+      branch: product.branch?.name || null,
+      branchInfo: product.branch
+        ? { name: product.branch.name, description: product.branch.description || null }
+        : null
     };
 
     res.json(productWithBranch);
