@@ -60,6 +60,7 @@ export async function getAllBranchesForAdmin() {
       id: true,
       name: true,
       description: true,
+      logo: true,
       isActive: true,
       createdAt: true,
       updatedAt: true

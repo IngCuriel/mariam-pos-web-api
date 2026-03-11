@@ -815,15 +815,22 @@ export const getBranchesForConfig = async (req, res) => {
   }
 };
 
-// Actualizar sucursal (ej. activar/desactivar) - solo admin
+// Actualizar sucursal (isActive, description, logo) - solo admin
 export const updateBranch = async (req, res) => {
   try {
     const { id } = req.params;
-    const { isActive } = req.body;
-    if (typeof isActive !== 'boolean') {
-      return res.status(400).json({ error: 'Se requiere isActive (boolean)' });
+    const { isActive, description, logo } = req.body;
+
+    const data = {};
+    if (typeof isActive === 'boolean') data.isActive = isActive;
+    if (description !== undefined) data.description = description === '' ? null : description;
+    if (logo !== undefined) data.logo = logo === '' ? null : logo;
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ error: 'Envía al menos un campo: isActive, description o logo' });
     }
-    const branch = await updateBranchService(id, { isActive });
+
+    const branch = await updateBranchService(id, data);
     res.json(branch);
   } catch (error) {
     console.error('Error actualizando sucursal:', error);

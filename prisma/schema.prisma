@@ -20,7 +20,8 @@ datasource db {
 model Branch {
   id          Int      @id @default(autoincrement())
   name        String   @unique
-  description String?
+  description String?  // Dirección o texto descriptivo (ej. para "solo tienda")
+  logo        String?  // URL del logo de la sucursal
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
