@@ -95,12 +95,24 @@ export const createRequest = async (req, res) => {
 
     // Generar folio único usando el ID de la solicitud + 5 números aleatorios
     const folio = generateFolio(request.id);
+    // Plazo de 48 h para subir comprobante (Caso 1: solicitud con saldo disponible)
+    const depositDeadline = new Date(request.createdAt.getTime() + 48 * 60 * 60 * 1000);
 
-    // Actualizar la solicitud con el folio
+    // Actualizar la solicitud con el folio y la fecha límite de comprobante
     const updatedRequest = await prisma.cashExpressRequest.update({
       where: { id: request.id },
-      data: { folio }
+      data: { folio, depositDeadline }
     });
+
+    // Apartar saldo: incrementar reservedBalance para esta solicitud
+    config = await prisma.cashExpressConfig.findFirst();
+    if (config) {
+      const currentReserved = config.reservedBalance || 0;
+      await prisma.cashExpressConfig.update({
+        where: { id: config.id },
+        data: { reservedBalance: currentReserved + parseFloat(amount) }
+      });
+    }
 
     res.status(201).json({
       message: 'Solicitud creada exitosamente',
@@ -363,9 +375,8 @@ export const updateRequestStatus = async (req, res) => {
       }
     }
 
-    // Si se está marcando como ENTREGADO, descontar del saldo
+    // Si se está marcando como ENTREGADO, descontar del saldo disponible y liberar apartado
     if (status === 'ENTREGADO' && currentRequest.status !== 'ENTREGADO') {
-      // Obtener configuración para actualizar el saldo
       let config = await prisma.cashExpressConfig.findFirst();
       if (!config) {
         return res.status(500).json({
@@ -373,37 +384,53 @@ export const updateRequestStatus = async (req, res) => {
         });
       }
 
-      const amountToDeduct = currentRequest.amount; // Monto a entregar (sin comisión)
-      const previousBalance = config.availableBalance;
+      const amountToDeduct = currentRequest.amount;
+      const previousBalance = config.availableBalance || 0;
+      const previousReserved = config.reservedBalance || 0;
       const newBalance = previousBalance - amountToDeduct;
+      const newReserved = Math.max(0, previousReserved - amountToDeduct);
 
-      // Verificar que haya saldo suficiente
       if (newBalance < 0) {
         return res.status(400).json({
           error: `Saldo insuficiente. Saldo actual: ${previousBalance.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}, Monto a entregar: ${amountToDeduct.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}`
         });
       }
 
-      // Actualizar saldo en configuración
       config = await prisma.cashExpressConfig.update({
         where: { id: config.id },
         data: {
-          availableBalance: newBalance
+          availableBalance: newBalance,
+          reservedBalance: newReserved
         }
       });
 
-      // Registrar retiro en historial
       await prisma.cashExpressBalanceHistory.create({
         data: {
-          amount: -amountToDeduct, // Negativo porque es un retiro
+          amount: -amountToDeduct,
           description: `Entrega de efectivo - Solicitud ${currentRequest.folio}`,
           previousBalance,
           newBalance,
-          userId: req.userId, // Admin que marca como entregado
+          userId: req.userId,
           cashExpressConfigId: config.id,
-          cashExpressRequestId: parseInt(id) // Ligar con la solicitud
+          cashExpressRequestId: parseInt(id)
         }
       });
+    }
+
+    // Si se cancela o se rechaza, liberar el saldo apartado
+    if ((status === 'CANCELADO' || status === 'REBOTADO') && currentRequest.status !== status) {
+      const statusesThatReserve = ['PENDIENTE', 'EN_ESPERA_CONFIRMACION', 'DEPOSITO_VALIDADO'];
+      if (statusesThatReserve.includes(currentRequest.status)) {
+        let config = await prisma.cashExpressConfig.findFirst();
+        if (config) {
+          const currentReserved = config.reservedBalance || 0;
+          const newReserved = Math.max(0, currentReserved - currentRequest.amount);
+          await prisma.cashExpressConfig.update({
+            where: { id: config.id },
+            data: { reservedBalance: newReserved }
+          });
+        }
+      }
     }
 
     const updateData = {
@@ -488,10 +515,16 @@ export const uploadDepositReceipt = async (req, res) => {
     }
 
     // Solo permitir subir/reemplazar comprobante en estados PENDIENTE o REBOTADO
-    // Cuando está EN_ESPERA_CONFIRMACION, el admin está revisando, no se puede modificar
     if (request.status !== 'PENDIENTE' && request.status !== 'REBOTADO') {
       return res.status(400).json({
         error: 'Solo se puede subir o reemplazar comprobante en solicitudes pendientes o rechazadas. Si tu comprobante está en revisión, espera la respuesta del administrador.'
+      });
+    }
+
+    // Caso 1: si pasaron 48 h desde la creación, ya no se permite subir comprobante
+    if (request.depositDeadline && new Date() > new Date(request.depositDeadline)) {
+      return res.status(400).json({
+        error: 'El plazo de 48 horas para subir el comprobante ha vencido. Ya no puedes subir el comprobante en esta solicitud. Crea una nueva solicitud para continuar.'
       });
     }
 
@@ -636,6 +669,13 @@ export const confirmDepositReceipt = async (req, res) => {
       });
     }
 
+    // Caso 1: si pasaron 48 h desde la creación, ya no se permite enviar a revisión
+    if (request.depositDeadline && new Date() > new Date(request.depositDeadline)) {
+      return res.status(400).json({
+        error: 'El plazo de 48 horas para subir el comprobante ha vencido. Crea una nueva solicitud para continuar.'
+      });
+    }
+
     // Cambiar estado a "En espera de confirmación" y guardar fecha de envío
     const previousStatus = request.status;
     const updatedRequest = await prisma.cashExpressRequest.update({
@@ -688,12 +728,13 @@ export const getConfig = async (req, res) => {
     if (!config) {
       config = await prisma.cashExpressConfig.create({
         data: {
-          serviceDays: '[1,2,3,4,5]', // Lunes a viernes
+          serviceDays: '[1,2,3,4,5]',
           startTime: '09:00',
           endTime: '20:00',
           holidays: '[]',
           nonWorkingDayMessage: 'Tu solicitud será procesada el próximo día hábil.',
           availableBalance: 0,
+          reservedBalance: 0,
           dailyMinimumDeposit: 500,
           maxAmount: 1000,
           commissionPercentage: 6.5,
@@ -720,6 +761,7 @@ export const getConfig = async (req, res) => {
       holidays: JSON.parse(config.holidays),
       nonWorkingDayMessage: config.nonWorkingDayMessage,
       availableBalance: config.availableBalance || 0,
+      reservedBalance: config.reservedBalance ?? 0,
       dailyMinimumDeposit: config.dailyMinimumDeposit || 500,
       maxAmount: config.maxAmount || 1000,
       commissionPercentage: config.commissionPercentage || 6.5,
@@ -852,6 +894,7 @@ export const updateConfig = async (req, res) => {
         holidays: JSON.parse(config.holidays),
         nonWorkingDayMessage: config.nonWorkingDayMessage,
         availableBalance: config.availableBalance || 0,
+        reservedBalance: config.reservedBalance ?? 0,
         dailyMinimumDeposit: config.dailyMinimumDeposit || 500,
         maxAmount: config.maxAmount || 1000,
         commissionPercentage: config.commissionPercentage || 6.5,
@@ -874,11 +917,12 @@ export const calculateAvailabilityDate = async (amount) => {
     }
 
     const availableBalance = config.availableBalance || 0;
+    const reservedBalance = config.reservedBalance || 0;
+    const effectiveAvailable = availableBalance - reservedBalance;
     const dailyMinimumDeposit = config.dailyMinimumDeposit || 500;
     const serviceDays = JSON.parse(config.serviceDays || '[1,2,3,4,5]');
     const holidays = JSON.parse(config.holidays || '[]');
 
-    // Contar solicitudes pendientes que están esperando procesamiento
     const pendingRequests = await prisma.cashExpressRequest.count({
       where: {
         status: {
@@ -887,27 +931,13 @@ export const calculateAvailabilityDate = async (amount) => {
       }
     });
 
-    // Calcular el monto total de solicitudes pendientes
-    const pendingAmounts = await prisma.cashExpressRequest.findMany({
-      where: {
-        status: {
-          in: ['PENDIENTE', 'EN_ESPERA_CONFIRMACION', 'DEPOSITO_VALIDADO']
-        }
-      },
-      select: {
-        amount: true
-      }
-    });
-
-    const totalPendingAmount = pendingAmounts.reduce((sum, req) => sum + req.amount, 0);
-
-    // Si hay saldo suficiente para cubrir esta solicitud y las pendientes, está disponible hoy
-    if (availableBalance >= (amount + totalPendingAmount)) {
-      return { date: new Date(), isAvailableNow: true, pendingRequests: pendingRequests };
+    // Caso 2: saldo disponible para nueva solicitud = disponible - apartado
+    if (effectiveAvailable >= amount) {
+      return { date: new Date(), isAvailableNow: true, pendingRequests };
     }
 
-    // Calcular cuánto dinero falta considerando solicitudes pendientes
-    const totalNeeded = (amount + totalPendingAmount) - availableBalance;
+    // Calcular cuánto dinero falta (abono mínimo diario para estimar fecha)
+    const totalNeeded = amount - effectiveAvailable;
     
     // Calcular cuántos días hábiles se necesitan
     // Considerando que cada día se abona mínimo dailyMinimumDeposit
@@ -1132,6 +1162,7 @@ export const getCurrentBalance = async (req, res) => {
 
     res.json({
       availableBalance: config.availableBalance || 0,
+      reservedBalance: config.reservedBalance ?? 0,
       dailyMinimumDeposit: config.dailyMinimumDeposit || 500,
     });
   } catch (error) {

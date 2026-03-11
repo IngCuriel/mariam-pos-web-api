@@ -308,6 +308,8 @@ model CashExpressConfig {
   nonWorkingDayMessage String? @default("Tu solicitud será procesada el próximo día hábil.")
   // Saldo disponible actual
   availableBalance     Float   @default(0)
+  // Saldo apartado por solicitudes pendientes (PENDIENTE, EN_ESPERA_CONFIRMACION, DEPOSITO_VALIDADO)
+  reservedBalance      Float   @default(0)
   // Abono mínimo diario (por defecto $500)
   dailyMinimumDeposit  Float   @default(500)
   // Monto máximo de depósito a enviar
@@ -396,6 +398,7 @@ model CashExpressRequest {
   status             CashExpressStatus @default(PENDIENTE)
   rejectionReason    String? // Motivo de rechazo si fue rebotada
   depositReceipt     String? // URL o base64 del comprobante de depósito
+  depositDeadline    DateTime? // Fecha límite para subir comprobante (createdAt + 48 h)
   receiptSentAt      DateTime? // Fecha de envío del comprobante a revisión
   depositValidatedAt DateTime? // Fecha de validación del depósito
   estimatedDeliveryDate DateTime? // Fecha estimada de entrega calculada al crear la solicitud
