@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { getOrCreateBranch } from '../services/branchService.js';
+import { getOrCreateBranch, getAllBranchesForAdmin, updateBranch as updateBranchService } from '../services/branchService.js';
 import { assignEmojiToProduct } from '../services/emojiService.js';
 const prisma = new PrismaClient();
 
@@ -772,6 +772,33 @@ export const getAllBranches = async (req, res) => {
   } catch (error) {
     console.error('Error obteniendo sucursales:', error);
     res.status(500).json({ error: 'Error obteniendo sucursales' });
+  }
+};
+
+// Obtener todas las sucursales para configuración admin (incluye inactivas)
+export const getBranchesForConfig = async (req, res) => {
+  try {
+    const branches = await getAllBranchesForAdmin();
+    res.json(branches);
+  } catch (error) {
+    console.error('Error obteniendo sucursales para config:', error);
+    res.status(500).json({ error: 'Error obteniendo sucursales' });
+  }
+};
+
+// Actualizar sucursal (ej. activar/desactivar) - solo admin
+export const updateBranch = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+    if (typeof isActive !== 'boolean') {
+      return res.status(400).json({ error: 'Se requiere isActive (boolean)' });
+    }
+    const branch = await updateBranchService(id, { isActive });
+    res.json(branch);
+  } catch (error) {
+    console.error('Error actualizando sucursal:', error);
+    res.status(500).json({ error: 'Error actualizando sucursal' });
   }
 };
 

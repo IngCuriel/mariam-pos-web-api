@@ -50,6 +50,37 @@ export async function getAllBranches() {
 }
 
 /**
+ * Obtiene todas las sucursales (activas e inactivas) para configuración admin
+ * @returns {Promise<Array>} - Lista de sucursales
+ */
+export async function getAllBranchesForAdmin() {
+  return await prisma.branch.findMany({
+    orderBy: { name: 'asc' },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      isActive: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  });
+}
+
+/**
+ * Actualiza una sucursal (ej. isActive)
+ * @param {number} id - ID de la sucursal
+ * @param {Object} data - Datos a actualizar (ej. { isActive: false })
+ * @returns {Promise<Object>} - Sucursal actualizada
+ */
+export async function updateBranch(id, data) {
+  return await prisma.branch.update({
+    where: { id: Number(id) },
+    data
+  });
+}
+
+/**
  * Obtiene una sucursal por ID
  * @param {number} branchId - ID de la sucursal
  * @returns {Promise<Object|null>} - Sucursal o null
