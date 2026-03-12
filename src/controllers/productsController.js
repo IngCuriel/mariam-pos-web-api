@@ -619,15 +619,16 @@ export const getCategoriesByBranch = async (req, res) => {
 // Obtener todos los productos de todas las sucursales (para tienda en línea)
 export const getAllProducts = async (req, res) => {
   try {
-    const { 
-      includeInventory, 
-      includePresentations, 
-      search, 
-      categoryId, 
+    const {
+      includeInventory,
+      includePresentations,
+      search,
+      categoryId,
       branch,
-      showInStoreOnly = 'false', // Nuevo parámetro para filtrar por categorías visibles
+      showInStoreOnly = 'false',
       limit = 30,
-      offset = 0
+      offset = 0,
+      sortBy
     } = req.query;
 
     const where = {};
@@ -725,11 +726,15 @@ export const getAllProducts = async (req, res) => {
     // Obtener total de productos (para paginación)
     const total = await prisma.product.count({ where });
 
-    // Obtener productos con paginación
+    // Orden: por defecto nombre; si sortBy=createdAt, los más recientes primero
+    const orderBy = sortBy === 'createdAt'
+      ? { createdAt: 'desc' }
+      : { name: 'asc' };
+
     const products = await prisma.product.findMany({
       where,
       include,
-      orderBy: { name: 'asc' },
+      orderBy,
       take: parseInt(limit),
       skip: parseInt(offset)
     });
