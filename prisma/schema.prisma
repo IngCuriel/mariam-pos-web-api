@@ -96,8 +96,8 @@ model Product {
   code           String?
   name           String
   status         Int?
-  saleType       String?   // Tipo de venta comercial (ej. menudeo, mayoreo) — independiente de tipoEnvio
-  tipoEnvio      String?   // Solo forma de entrega: SOBRE_PEDIDO | SOLO_TIENDA | ENVIO_INMEDIATO (tienda online)
+  saleType            String?   // Tipo de venta comercial (ej. menudeo, mayoreo)
+  productAvailability String?   // Disponibilidad: online_pickup | local_delivery | in_store_only (tienda en línea)
   price          Float
   cost           Float?
   description    String?
@@ -125,6 +125,7 @@ model Product {
   @@index([branchId])
   @@index([categoryId])
   @@index([showInStore])
+  @@index([productAvailability])
 }
 
 model ProductImage {

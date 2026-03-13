@@ -13,7 +13,7 @@ import {
   getProductsByCategoryForConfig,
   updateProductVisibility,
   updateProductFeatures,
-  updateProductTipoEnvio,
+  updateProductAvailability,
   addProductImage,
   deleteProductImage,
   reorderProductImages,
@@ -44,7 +44,7 @@ router.get("/config/categories", authenticate, requireAdmin, getCategoriesForCon
 router.get("/config/category/:categoryId/products", authenticate, requireAdmin, getProductsByCategoryForConfig); // Obtener productos de una categoría
 router.patch("/:id/visibility", authenticate, requireAdmin, updateProductVisibility); // Actualizar visibilidad del producto
 router.patch("/:id/features", authenticate, requireAdmin, updateProductFeatures); // Actualizar características (lista) del producto
-router.patch("/:id/tipo-envio", authenticate, requireAdmin, updateProductTipoEnvio); // Actualizar solo tipo de envío (no saleType)
+router.patch("/:id/product-availability", authenticate, requireAdmin, updateProductAvailability); // Actualizar disponibilidad (online_pickup | local_delivery | in_store_only)
 router.post("/:id/images", authenticate, requireAdmin, addProductImage); // Agregar imagen al producto
 router.delete("/:id/images/:imageId", authenticate, requireAdmin, deleteProductImage); // Eliminar imagen del producto
 router.patch("/:id/images/reorder", authenticate, requireAdmin, reorderProductImages); // Reordenar imágenes
