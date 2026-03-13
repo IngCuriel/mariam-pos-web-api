@@ -397,11 +397,12 @@ export const confirmOrderByCustomer = async (req, res) => {
   }
 };
 
-// Admin marca como listo para recoger -> READY_FOR_PICKUP
+// Admin marca como listo para recoger -> READY_FOR_PICKUP (opcional: readyAt en body)
 export const markOrderReady = async (req, res) => {
   try {
     const { id } = req.params;
-    const order = await orderService.markAsReady(id);
+    const { readyAt } = req.body || {};
+    const order = await orderService.markAsReady(id, readyAt);
     res.json({
       message: 'Pedido marcado como listo para recoger.',
       order

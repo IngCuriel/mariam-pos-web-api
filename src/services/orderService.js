@@ -165,8 +165,10 @@ export async function confirmByCustomer(orderId, userId) {
 
 /**
  * Admin marca pedido como listo para recoger. IN_PREPARATION -> READY_FOR_PICKUP.
+ * @param {number|string} orderId
+ * @param {string|Date} [readyAt] - Fecha/hora en que estará listo para recoger (ISO string o Date). Si no se envía, se usa ahora.
  */
-export async function markAsReady(orderId) {
+export async function markAsReady(orderId, readyAt) {
   const id = parseInt(orderId);
   const order = await prisma.order.findUnique({
     where: { id },
@@ -189,12 +191,18 @@ export async function markAsReady(orderId) {
   }
 
   const previousStatus = order.status;
+  const readyAtDate = readyAt ? new Date(readyAt) : new Date();
+  if (Number.isNaN(readyAtDate.getTime())) {
+    const err = new Error('La fecha/hora indicada no es válida.');
+    err.statusCode = 400;
+    throw err;
+  }
 
   const updatedOrder = await prisma.order.update({
     where: { id },
     data: {
       status: newStatus,
-      readyAt: new Date(),
+      readyAt: readyAtDate,
     },
     include: orderInclude,
   });
