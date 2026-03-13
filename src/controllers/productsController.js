@@ -625,6 +625,7 @@ export const getAllProducts = async (req, res) => {
       search,
       categoryId,
       branch,
+      branchId,
       showInStoreOnly = 'false',
       limit = 30,
       offset = 0,
@@ -694,15 +695,16 @@ export const getAllProducts = async (req, res) => {
       where.categoryId = categoryId;
     }
     
-    // Filtro por sucursal
-    if (branch) {
+    // Filtro por sucursal (branchId tiene prioridad sobre branch por nombre)
+    if (branchId) {
+      where.branchId = parseInt(branchId, 10);
+    } else if (branch) {
       const branchObj = await prisma.branch.findUnique({
         where: { name: branch }
       });
       if (branchObj) {
         where.branchId = branchObj.id;
       } else {
-        // Si no existe la sucursal, retornar respuesta vacía con paginación
         return res.json({
           products: [],
           total: 0,
