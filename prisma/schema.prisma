@@ -259,6 +259,7 @@ model Order {
   branch      Branch?      @relation(fields: [branchId], references: [id])
   confirmedAt DateTime?    // Cuando el cliente acepta pedido actualizado
   readyAt     DateTime?    // Cuando admin marca "listo para recoger"
+  deliveredAt DateTime?    // Cuando admin marca "entregado" (recoger en tienda)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 

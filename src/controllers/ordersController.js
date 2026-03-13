@@ -227,10 +227,11 @@ export const getOrderById = async (req, res) => {
 };
 
 // Actualizar estado de pedido (solo admin) - uso limitado; preferir endpoints de flujo
+// Cuando status es COMPLETED se puede enviar deliveredAt (ISO) para registrar cuándo fue entregado.
 export const updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, deliveredAt: deliveredAtBody } = req.body || {};
 
     const validStatuses = Object.values(OrderStatus);
     if (!validStatuses.includes(status)) {
@@ -250,9 +251,18 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
+    const data = { status };
+    if (status === OrderStatus.COMPLETED) {
+      const deliveredAtDate = deliveredAtBody ? new Date(deliveredAtBody) : new Date();
+      if (Number.isNaN(deliveredAtDate.getTime())) {
+        return res.status(400).json({ error: 'La fecha/hora de entrega no es válida.' });
+      }
+      data.deliveredAt = deliveredAtDate;
+    }
+
     const order = await prisma.order.update({
       where: { id: parseInt(id) },
-      data: { status },
+      data,
       include: {
         items: true,
         branch: { select: { id: true, name: true } },
