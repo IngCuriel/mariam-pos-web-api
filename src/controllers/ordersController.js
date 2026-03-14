@@ -30,7 +30,14 @@ export const getDeliveryTypes = async (req, res) => {
 export const createOrder = async (req, res) => {
   try {
     const userId = req.userId;
-    const { items, notes, branchId, deliveryTypeId: bodyDeliveryTypeId, deliveryCost: bodyDeliveryCost } = req.body || {};
+    const {
+      items,
+      notes,
+      branchId,
+      deliveryTypeId: bodyDeliveryTypeId,
+      deliveryCost: bodyDeliveryCost,
+      orderAvailability,
+    } = req.body || {};
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -61,6 +68,10 @@ export const createOrder = async (req, res) => {
         total,
         status: OrderStatus.UNDER_REVIEW,
         notes: notes || null,
+        orderAvailability:
+          orderAvailability === 'local_delivery' || orderAvailability === 'online_pickup'
+            ? orderAvailability
+            : null,
         userId,
         branchId: branchId || null,
         deliveryTypeId: deliveryTypeId || null,

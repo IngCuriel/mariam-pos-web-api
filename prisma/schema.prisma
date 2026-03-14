@@ -274,23 +274,24 @@ model OrderStatusHistory {
 }
 
 model Order {
-  id              Int           @id @default(autoincrement())
-  folio           String?       @unique
-  total           Float
-  status          OrderStatus   @default(UNDER_REVIEW)
-  notes           String?
-  userId          Int
-  user            User          @relation(fields: [userId], references: [id])
-  branchId        Int?
-  branch          Branch?       @relation(fields: [branchId], references: [id])
-  deliveryTypeId  Int?
-  deliveryType    DeliveryType? @relation(fields: [deliveryTypeId], references: [id])
-  deliveryCost    Float?        @default(0)  // Costo de envío al momento del pedido
-  confirmedAt     DateTime?     // Cuando el cliente acepta pedido actualizado
-  readyAt         DateTime?     // Cuando admin marca "listo para recoger" o "en camino"
-  deliveredAt     DateTime?     // Cuando admin marca "entregado"
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id                 Int           @id @default(autoincrement())
+  folio              String?       @unique
+  total              Float
+  status             OrderStatus   @default(UNDER_REVIEW)
+  notes              String?
+  orderAvailability  String?       // Origen del pedido: local_delivery | online_pickup (productAvailability del grupo)
+  userId             Int
+  user               User          @relation(fields: [userId], references: [id])
+  branchId           Int?
+  branch             Branch?       @relation(fields: [branchId], references: [id])
+  deliveryTypeId     Int?
+  deliveryType       DeliveryType? @relation(fields: [deliveryTypeId], references: [id])
+  deliveryCost       Float?        @default(0)  // Costo de envío al momento del pedido
+  confirmedAt        DateTime?     // Cuando el cliente acepta pedido actualizado
+  readyAt            DateTime?     // Cuando admin marca "listo para recoger" o "en camino"
+  deliveredAt        DateTime?     // Cuando admin marca "entregado"
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   items         OrderItem[]
   statusHistory OrderStatusHistory[]
