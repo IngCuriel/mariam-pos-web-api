@@ -287,6 +287,7 @@ model Order {
   deliveryTypeId     Int?
   deliveryType       DeliveryType? @relation(fields: [deliveryTypeId], references: [id])
   deliveryCost       Float?        @default(0)  // Costo de envío al momento del pedido
+  deliveryAddress    String?       // Dirección de envío (cuando el cliente confirma pedido con envío a domicilio)
   confirmedAt        DateTime?     // Cuando el cliente acepta pedido actualizado
   readyAt            DateTime?     // Cuando admin marca "listo para recoger" o "en camino"
   deliveredAt        DateTime?     // Cuando admin marca "entregado"

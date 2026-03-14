@@ -122,12 +122,15 @@ export async function reviewAvailability(orderId, itemsPayload) {
 /**
  * Cliente acepta pedido actualizado. Pasa a IN_PREPARATION.
  * Solo válido si estado es PARTIALLY_AVAILABLE o AVAILABLE.
+ * Si el pedido es envío a domicilio, puede enviar deliveryAddress (string) para guardarla.
  */
-export async function confirmByCustomer(orderId, userId) {
+export async function confirmByCustomer(orderId, userId, options = {}) {
   const id = parseInt(orderId);
+  const { deliveryAddress } = options;
   const order = await prisma.order.findUnique({
     where: { id },
-    select: { id: true, status: true, userId: true },
+    select: { id: true, status: true, userId: true, deliveryTypeId: true },
+    include: { deliveryType: true },
   });
 
   if (!order) {
@@ -151,14 +154,25 @@ export async function confirmByCustomer(orderId, userId) {
     throw err;
   }
 
+  const isDelivery = order.deliveryType?.code === 'delivery';
+  if (isDelivery && (!deliveryAddress || typeof deliveryAddress !== 'string' || !deliveryAddress.trim())) {
+    const err = new Error('Para envío a domicilio debes indicar la dirección de entrega.');
+    err.statusCode = 400;
+    throw err;
+  }
+
   const previousStatus = order.status;
+  const updateData = {
+    status: newStatus,
+    confirmedAt: new Date(),
+  };
+  if (deliveryAddress && typeof deliveryAddress === 'string' && deliveryAddress.trim()) {
+    updateData.deliveryAddress = deliveryAddress.trim();
+  }
 
   const updatedOrder = await prisma.order.update({
     where: { id },
-    data: {
-      status: newStatus,
-      confirmedAt: new Date(),
-    },
+    data: updateData,
     include: orderInclude,
   });
 

@@ -420,12 +420,13 @@ export const confirmOrderAvailability = async (req, res) => {
   }
 };
 
-// Cliente acepta pedido actualizado -> IN_PREPARATION
+// Cliente acepta pedido actualizado -> IN_PREPARATION (opcional: deliveryAddress para envío a domicilio)
 export const confirmOrderByCustomer = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.userId;
-    const order = await orderService.confirmByCustomer(id, userId);
+    const { deliveryAddress } = req.body || {};
+    const order = await orderService.confirmByCustomer(id, userId, { deliveryAddress });
     res.json({
       message: 'Pedido aceptado. Estamos preparando tu pedido.',
       order
