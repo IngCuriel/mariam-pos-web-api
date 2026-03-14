@@ -42,7 +42,9 @@ export const createOrder = async (req, res) => {
             productName: item.productName,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
-            subtotal: item.subtotal || item.unitPrice * item.quantity
+            subtotal: item.subtotal || item.unitPrice * item.quantity,
+            presentationName: item.presentationName ?? null,
+            presentationQuantity: item.presentationQuantity ?? null
           }))
         }
       },

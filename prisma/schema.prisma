@@ -271,17 +271,19 @@ model Order {
 }
 
 model OrderItem {
-  id                Int      @id @default(autoincrement())
-  orderId           Int
-  order             Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId         Int
-  productName       String
-  quantity          Int       // Cantidad solicitada
-  confirmedQuantity Int?      // Cantidad confirmada por admin (<= quantity)
-  unitPrice         Float
-  subtotal          Float    // Subtotal según cantidad solicitada (se recalcula al confirmar)
-  isAvailable       Boolean?  // null = no revisado, true = disponible, false = no disponible
-  createdAt         DateTime  @default(now())
+  id                   Int      @id @default(autoincrement())
+  orderId              Int
+  order                Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId            Int
+  productName          String
+  quantity             Int       // Cantidad solicitada (unidades de esta presentación)
+  confirmedQuantity    Int?      // Cantidad confirmada por admin (<= quantity)
+  unitPrice            Float
+  subtotal             Float    // Subtotal según cantidad solicitada (se recalcula al confirmar)
+  isAvailable           Boolean?  // null = no revisado, true = disponible, false = no disponible
+  presentationName     String?   // Nombre de la presentación elegida (ej. "Caja 6 pz")
+  presentationQuantity Int?      // Piezas de esa presentación (ej. 6)
+  createdAt            DateTime  @default(now())
 
   @@index([orderId])
 }
