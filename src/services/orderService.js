@@ -129,8 +129,9 @@ export async function confirmByCustomer(orderId, userId, options = {}) {
   const { deliveryAddress } = options;
   const order = await prisma.order.findUnique({
     where: { id },
-    select: { id: true, status: true, userId: true, deliveryTypeId: true },
-    include: { deliveryType: true },
+    include: {
+      deliveryType: { select: { code: true } },
+    },
   });
 
   if (!order) {
