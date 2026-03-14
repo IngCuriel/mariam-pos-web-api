@@ -119,14 +119,26 @@ export async function reviewAvailability(orderId, itemsPayload) {
   return updatedOrder;
 }
 
+/** Construye string de dirección desde un UserAddress */
+function formatUserAddress(addr) {
+  const parts = [
+    addr.street,
+    addr.colony,
+    [addr.postalCode, addr.city].filter(Boolean).join(' '),
+  ].filter(Boolean);
+  if (addr.state) parts.push(addr.state);
+  if (addr.references?.trim()) parts.push(`Ref: ${addr.references.trim()}`);
+  return parts.join(', ');
+}
+
 /**
  * Cliente acepta pedido actualizado. Pasa a IN_PREPARATION.
  * Solo válido si estado es PARTIALLY_AVAILABLE o AVAILABLE.
- * Si el pedido es envío a domicilio, puede enviar deliveryAddress (string) para guardarla.
+ * Para envío a domicilio: enviar deliveryAddress (string) o addressId (id de UserAddress del usuario).
  */
 export async function confirmByCustomer(orderId, userId, options = {}) {
   const id = parseInt(orderId);
-  const { deliveryAddress } = options;
+  const { deliveryAddress: deliveryAddressRaw, addressId } = options;
   const order = await prisma.order.findUnique({
     where: { id },
     include: {
@@ -156,10 +168,26 @@ export async function confirmByCustomer(orderId, userId, options = {}) {
   }
 
   const isDelivery = order.deliveryType?.code === 'delivery';
-  if (isDelivery && (!deliveryAddress || typeof deliveryAddress !== 'string' || !deliveryAddress.trim())) {
-    const err = new Error('Para envío a domicilio debes indicar la dirección de entrega.');
-    err.statusCode = 400;
-    throw err;
+  let deliveryAddress = null;
+  if (isDelivery) {
+    if (addressId != null) {
+      const userAddress = await prisma.userAddress.findFirst({
+        where: { id: Number(addressId), userId },
+      });
+      if (!userAddress) {
+        const err = new Error('La dirección seleccionada no es válida.');
+        err.statusCode = 400;
+        throw err;
+      }
+      deliveryAddress = formatUserAddress(userAddress);
+    } else if (typeof deliveryAddressRaw === 'string' && deliveryAddressRaw.trim()) {
+      deliveryAddress = deliveryAddressRaw.trim();
+    }
+    if (!deliveryAddress) {
+      const err = new Error('Para envío a domicilio debes indicar la dirección de entrega.');
+      err.statusCode = 400;
+      throw err;
+    }
   }
 
   const previousStatus = order.status;
@@ -167,8 +195,8 @@ export async function confirmByCustomer(orderId, userId, options = {}) {
     status: newStatus,
     confirmedAt: new Date(),
   };
-  if (deliveryAddress && typeof deliveryAddress === 'string' && deliveryAddress.trim()) {
-    updateData.deliveryAddress = deliveryAddress.trim();
+  if (deliveryAddress) {
+    updateData.deliveryAddress = deliveryAddress;
   }
 
   const updatedOrder = await prisma.order.update({
