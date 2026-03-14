@@ -8,7 +8,16 @@ const orderInclude = {
   items: true,
   branch: { select: { id: true, name: true } },
   user: { select: { id: true, name: true, email: true } },
+  deliveryType: true,
+  statusHistory: { orderBy: { createdAt: 'asc' } },
 };
+
+/** Registra un cambio de estado en el historial del pedido (para timeline tipo Mercado Libre). */
+export async function recordStatusHistory(orderId, status) {
+  await prisma.orderStatusHistory.create({
+    data: { orderId: parseInt(orderId), status },
+  });
+}
 
 /**
  * Admin confirma disponibilidad: ajusta cantidades, recalcula total,
@@ -98,6 +107,7 @@ export async function reviewAvailability(orderId, itemsPayload) {
     include: orderInclude,
   });
 
+  await recordStatusHistory(id, updatedOrder.status);
   await createStatusChangeNotification(
     order.userId,
     'order',
@@ -152,6 +162,7 @@ export async function confirmByCustomer(orderId, userId) {
     include: orderInclude,
   });
 
+  await recordStatusHistory(id, newStatus);
   await createStatusChangeNotification(
     order.userId,
     'order',
@@ -164,15 +175,16 @@ export async function confirmByCustomer(orderId, userId) {
 }
 
 /**
- * Admin marca pedido como listo para recoger. IN_PREPARATION -> READY_FOR_PICKUP.
+ * Admin marca pedido como listo para recoger o como enviado (en camino).
+ * Si el pedido es envío a domicilio (deliveryType.code === 'delivery') -> IN_TRANSIT; si no -> READY_FOR_PICKUP.
  * @param {number|string} orderId
- * @param {string|Date} [readyAt] - Fecha/hora en que estará listo para recoger (ISO string o Date). Si no se envía, se usa ahora.
+ * @param {string|Date} [readyAt] - Fecha/hora en que estará listo o en que salió en camino (ISO string o Date).
  */
 export async function markAsReady(orderId, readyAt) {
   const id = parseInt(orderId);
   const order = await prisma.order.findUnique({
     where: { id },
-    select: { id: true, status: true, userId: true },
+    select: { id: true, status: true, userId: true, deliveryType: true },
   });
 
   if (!order) {
@@ -181,7 +193,9 @@ export async function markAsReady(orderId, readyAt) {
     throw err;
   }
 
-  const newStatus = OrderStatus.READY_FOR_PICKUP;
+  const isDelivery = order.deliveryType?.code === 'delivery';
+  const newStatus = isDelivery ? OrderStatus.IN_TRANSIT : OrderStatus.READY_FOR_PICKUP;
+
   if (!canTransition(order.status, newStatus)) {
     const err = new Error(
       `No se puede marcar como listo en estado ${order.status}. El pedido debe estar en preparación.`
@@ -207,6 +221,7 @@ export async function markAsReady(orderId, readyAt) {
     include: orderInclude,
   });
 
+  await recordStatusHistory(id, newStatus);
   await createStatusChangeNotification(
     order.userId,
     'order',
@@ -257,6 +272,7 @@ export async function cancelOrder(orderId, userId, isAdmin) {
     include: orderInclude,
   });
 
+  await recordStatusHistory(id, newStatus);
   await createStatusChangeNotification(
     order.userId,
     'order',

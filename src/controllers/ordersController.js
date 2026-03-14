@@ -12,11 +12,25 @@ const generateFolio = () => {
   return `ORD-${timestamp}-${random}`;
 };
 
-// Crear pedido
+// Tipos de entrega activos (configurables: recoger en sucursal, envío a domicilio, etc.)
+export const getDeliveryTypes = async (req, res) => {
+  try {
+    const types = await prisma.deliveryType.findMany({
+      where: { isActive: true },
+      orderBy: { displayOrder: 'asc' },
+    });
+    res.json(types);
+  } catch (error) {
+    console.error('Error obteniendo tipos de entrega:', error);
+    res.status(500).json({ error: 'Error al obtener tipos de entrega' });
+  }
+};
+
+// Crear pedido (acepta deliveryTypeId y opcionalmente deliveryCost; total = subtotal + deliveryCost)
 export const createOrder = async (req, res) => {
   try {
     const userId = req.userId;
-    const { items, notes, branchId } = req.body;
+    const { items, notes, branchId, deliveryTypeId: bodyDeliveryTypeId, deliveryCost: bodyDeliveryCost } = req.body || {};
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -24,10 +38,23 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    // Calcular total
-    const total = items.reduce((sum, item) => sum + (item.subtotal || item.unitPrice * item.quantity), 0);
+    const subtotal = items.reduce((sum, item) => sum + (item.subtotal || item.unitPrice * item.quantity), 0);
+    let deliveryTypeId = bodyDeliveryTypeId != null ? parseInt(bodyDeliveryTypeId, 10) : null;
+    let deliveryCost = 0;
 
-    // Crear pedido con items
+    if (deliveryTypeId) {
+      const deliveryType = await prisma.deliveryType.findFirst({
+        where: { id: deliveryTypeId, isActive: true },
+      });
+      if (!deliveryType) {
+        return res.status(400).json({ error: 'Tipo de entrega no válido o inactivo' });
+      }
+      deliveryCost = bodyDeliveryCost != null ? Number(bodyDeliveryCost) : deliveryType.cost;
+      if (Number.isNaN(deliveryCost) || deliveryCost < 0) deliveryCost = deliveryType.cost;
+    }
+
+    const total = subtotal + deliveryCost;
+
     const order = await prisma.order.create({
       data: {
         folio: generateFolio(),
@@ -36,6 +63,8 @@ export const createOrder = async (req, res) => {
         notes: notes || null,
         userId,
         branchId: branchId || null,
+        deliveryTypeId: deliveryTypeId || null,
+        deliveryCost: deliveryTypeId ? deliveryCost : null,
         items: {
           create: items.map(item => ({
             productId: item.productId,
@@ -50,25 +79,29 @@ export const createOrder = async (req, res) => {
       },
       include: {
         items: true,
-        branch: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        }
+        branch: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true, email: true } },
+        deliveryType: true,
+        statusHistory: { orderBy: { createdAt: 'asc' } },
+      }
+    });
+
+    await orderService.recordStatusHistory(order.id, OrderStatus.UNDER_REVIEW);
+
+    const orderWithHistory = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: {
+        items: true,
+        branch: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true, email: true } },
+        deliveryType: true,
+        statusHistory: { orderBy: { createdAt: 'asc' } },
       }
     });
 
     res.status(201).json({
       message: 'Pedido creado exitosamente',
-      order
+      order: orderWithHistory
     });
   } catch (error) {
     console.error('Error creando pedido:', error);
@@ -140,19 +173,9 @@ export const getOrders = async (req, res) => {
         take: limit,
         include: {
           items: true,
-          branch: {
-            select: {
-              id: true,
-              name: true
-            }
-          },
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true
-            }
-          }
+          branch: { select: { id: true, name: true } },
+          user: { select: { id: true, name: true, email: true } },
+          deliveryType: true,
         }
       }),
       prisma.order.count({ where })
@@ -190,19 +213,10 @@ export const getOrderById = async (req, res) => {
       where: { id: parseInt(id) },
       include: {
         items: true,
-        branch: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        }
+        branch: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true, email: true } },
+        deliveryType: true,
+        statusHistory: { orderBy: { createdAt: 'asc' } },
       }
     });
 
@@ -268,9 +282,13 @@ export const updateOrderStatus = async (req, res) => {
       include: {
         items: true,
         branch: { select: { id: true, name: true } },
-        user: { select: { id: true, name: true, email: true } }
+        user: { select: { id: true, name: true, email: true } },
+        deliveryType: true,
+        statusHistory: { orderBy: { createdAt: 'asc' } },
       }
     });
+
+    await orderService.recordStatusHistory(parseInt(id), status);
 
     if (currentOrder.status !== status) {
       await createStatusChangeNotification(

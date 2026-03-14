@@ -9,6 +9,7 @@ export const OrderStatus = {
   AVAILABLE: 'AVAILABLE',
   IN_PREPARATION: 'IN_PREPARATION',
   READY_FOR_PICKUP: 'READY_FOR_PICKUP',
+  IN_TRANSIT: 'IN_TRANSIT',       // En camino (envío a domicilio)
   COMPLETED: 'COMPLETED',
   CANCELLED: 'CANCELLED',
 };
@@ -19,8 +20,9 @@ export const ORDER_STATUS_TRANSITIONS = {
   [OrderStatus.UNDER_REVIEW]: [OrderStatus.PARTIALLY_AVAILABLE, OrderStatus.AVAILABLE, OrderStatus.CANCELLED],
   [OrderStatus.PARTIALLY_AVAILABLE]: [OrderStatus.IN_PREPARATION, OrderStatus.CANCELLED],
   [OrderStatus.AVAILABLE]: [OrderStatus.IN_PREPARATION, OrderStatus.CANCELLED],
-  [OrderStatus.IN_PREPARATION]: [OrderStatus.READY_FOR_PICKUP, OrderStatus.CANCELLED],
+  [OrderStatus.IN_PREPARATION]: [OrderStatus.READY_FOR_PICKUP, OrderStatus.IN_TRANSIT, OrderStatus.CANCELLED],
   [OrderStatus.READY_FOR_PICKUP]: [OrderStatus.COMPLETED],
+  [OrderStatus.IN_TRANSIT]: [OrderStatus.COMPLETED],
   [OrderStatus.COMPLETED]: [],
   [OrderStatus.CANCELLED]: [],
 };

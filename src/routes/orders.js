@@ -4,6 +4,7 @@ import {
   getOrders,
   getOrderById,
   getOrderCounts,
+  getDeliveryTypes,
   updateOrderStatus,
   updateOrderItemsAvailability,
   confirmOrderAvailability,
@@ -18,6 +19,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // Cliente y admin
+router.get('/delivery-types', getDeliveryTypes);
 router.post('/', createOrder);
 router.get('/', getOrders);
 router.get('/counts', requireAdmin, getOrderCounts);
