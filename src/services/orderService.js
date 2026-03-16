@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 
 const orderInclude = {
   items: true,
-  branch: { select: { id: true, name: true } },
+  branch: { select: { id: true, name: true, description: true, logo: true } },
   user: { select: { id: true, name: true, email: true } },
   deliveryType: true,
   statusHistory: { orderBy: { createdAt: 'asc' } },

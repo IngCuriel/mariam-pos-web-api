@@ -229,7 +229,7 @@ export const getOrderById = async (req, res) => {
       where: { id: parseInt(id) },
       include: {
         items: true,
-        branch: { select: { id: true, name: true } },
+        branch: { select: { id: true, name: true, description: true, logo: true } },
         user: { select: { id: true, name: true, email: true } },
         deliveryType: true,
         statusHistory: { orderBy: { createdAt: 'asc' } },
