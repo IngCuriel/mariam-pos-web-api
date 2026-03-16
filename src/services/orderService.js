@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { createStatusChangeNotification } from '../controllers/notificationsController.js';
 import { OrderStatus, canTransition } from '../constants/orderStatus.js';
+import { getBranchDeliveryTypes } from './branchService.js';
 
 const prisma = new PrismaClient();
 
@@ -145,15 +146,17 @@ function formatUserAddress(addr) {
 /**
  * Cliente acepta pedido actualizado. Pasa a IN_PREPARATION.
  * Solo válido si estado es PARTIALLY_AVAILABLE o AVAILABLE.
+ * Si el pedido no tiene forma de entrega, debe enviar deliveryTypeId (y opcionalmente deliveryCost).
  * Para envío a domicilio: enviar deliveryAddress (string) o addressId (id de UserAddress del usuario).
  */
 export async function confirmByCustomer(orderId, userId, options = {}) {
   const id = parseInt(orderId);
-  const { deliveryAddress: deliveryAddressRaw, addressId } = options;
+  const { deliveryAddress: deliveryAddressRaw, addressId, deliveryTypeId: bodyDeliveryTypeId, deliveryCost: bodyDeliveryCost } = options;
   const order = await prisma.order.findUnique({
     where: { id },
     include: {
-      deliveryType: { select: { code: true } },
+      deliveryType: { select: { id: true, code: true } },
+      items: { select: { subtotal: true } },
     },
   });
 
@@ -178,7 +181,44 @@ export async function confirmByCustomer(orderId, userId, options = {}) {
     throw err;
   }
 
-  const isDelivery = order.deliveryType?.code === 'delivery';
+  let deliveryTypeId = order.deliveryTypeId;
+  let deliveryCost = order.deliveryCost != null ? Number(order.deliveryCost) : 0;
+  let total = order.total;
+
+  if (order.deliveryTypeId == null) {
+    if (bodyDeliveryTypeId == null) {
+      const err = new Error('Debes elegir la forma de entrega para aceptar el pedido.');
+      err.statusCode = 400;
+      throw err;
+    }
+    const requestedId = Number(bodyDeliveryTypeId);
+    let chosen = null;
+    if (order.branchId != null) {
+      const allowedTypes = await getBranchDeliveryTypes(order.branchId);
+      chosen = Array.isArray(allowedTypes) ? allowedTypes.find((t) => t.id === requestedId) : null;
+    } else {
+      const dt = await prisma.deliveryType.findFirst({
+        where: { id: requestedId, isActive: true },
+      });
+      chosen = dt ? { id: dt.id, cost: dt.cost ?? 0 } : null;
+    }
+    if (!chosen) {
+      const err = new Error('La forma de entrega elegida no es válida para este pedido.');
+      err.statusCode = 400;
+      throw err;
+    }
+    deliveryTypeId = chosen.id;
+    deliveryCost = bodyDeliveryCost != null && !Number.isNaN(Number(bodyDeliveryCost)) && Number(bodyDeliveryCost) >= 0
+      ? Number(bodyDeliveryCost)
+      : (chosen.cost ?? 0);
+    const subtotal = order.items.reduce((sum, i) => sum + (i.subtotal || 0), 0);
+    total = subtotal + deliveryCost;
+  }
+
+  const deliveryTypeForCode = deliveryTypeId != null
+    ? await prisma.deliveryType.findUnique({ where: { id: deliveryTypeId }, select: { code: true } })
+    : null;
+  const isDelivery = deliveryTypeForCode?.code === 'delivery';
   let deliveryAddress = null;
   if (isDelivery) {
     if (addressId != null) {
@@ -205,6 +245,7 @@ export async function confirmByCustomer(orderId, userId, options = {}) {
   const updateData = {
     status: newStatus,
     confirmedAt: new Date(),
+    ...(order.deliveryTypeId == null ? { deliveryTypeId, deliveryCost, total } : {}),
   };
   if (deliveryAddress) {
     updateData.deliveryAddress = deliveryAddress;

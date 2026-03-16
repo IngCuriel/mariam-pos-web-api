@@ -425,13 +425,18 @@ export const confirmOrderAvailability = async (req, res) => {
   }
 };
 
-// Cliente acepta pedido actualizado -> IN_PREPARATION (deliveryAddress o addressId para envío a domicilio)
+// Cliente acepta pedido actualizado -> IN_PREPARATION. Si el pedido no tiene forma de entrega, body puede incluir deliveryTypeId y deliveryCost. Para envío a domicilio: deliveryAddress o addressId.
 export const confirmOrderByCustomer = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.userId;
-    const { deliveryAddress, addressId } = req.body || {};
-    const order = await orderService.confirmByCustomer(id, userId, { deliveryAddress, addressId });
+    const { deliveryAddress, addressId, deliveryTypeId, deliveryCost } = req.body || {};
+    const order = await orderService.confirmByCustomer(id, userId, {
+      deliveryAddress,
+      addressId,
+      deliveryTypeId,
+      deliveryCost,
+    });
     res.json({
       message: 'Pedido aceptado. Estamos preparando tu pedido.',
       order
