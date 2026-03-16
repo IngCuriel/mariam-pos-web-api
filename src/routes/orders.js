@@ -16,10 +16,12 @@ import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Público: consulta de tipos de entrega (por sucursal o todos), sin login
+router.get('/delivery-types', getDeliveryTypes);
+
 router.use(authenticate);
 
 // Cliente y admin
-router.get('/delivery-types', getDeliveryTypes);
 router.post('/', createOrder);
 router.get('/', getOrders);
 router.get('/counts', requireAdmin, getOrderCounts);
