@@ -115,10 +115,8 @@ export async function getBranchByName(branchName) {
 }
 
 /**
- * Tipos de entrega vinculados a una sucursal (para config admin y para carrito por sucursal).
- * Si la sucursal no tiene ninguno configurado, devuelve todos los activos (comportamiento por defecto).
- * @param {number} branchId - ID de la sucursal
- * @returns {Promise<Array<{id: number, code: string, name: string, cost: number, isActive: boolean, displayOrder: number}>>}
+ * Tipos de entrega para la tienda (carrito): solo links activos, con costo y orden por sucursal.
+ * Si la sucursal no tiene ninguno configurado, devuelve todos los DeliveryType activos.
  */
 export async function getBranchDeliveryTypes(branchId) {
   if (!branchId) return [];
@@ -126,16 +124,26 @@ export async function getBranchDeliveryTypes(branchId) {
     where: { id: Number(branchId) },
     include: {
       deliveryTypeLinks: {
-        include: { deliveryType: true },
-        orderBy: { deliveryType: { displayOrder: 'asc' } }
+        where: { isActive: true },
+        include: { deliveryType: true }
       }
     }
   });
   if (!branch) return [];
-  const types = branch.deliveryTypeLinks
+  const links = branch.deliveryTypeLinks
     .filter((link) => link.deliveryType?.isActive)
-    .map((link) => link.deliveryType);
-  if (types.length > 0) return types;
+    .sort((a, b) => {
+      const orderA = a.displayOrder ?? 0;
+      const orderB = b.displayOrder ?? 0;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.deliveryType?.displayOrder ?? 0) - (b.deliveryType?.displayOrder ?? 0);
+    });
+  if (links.length > 0) {
+    return links.map((link) => ({
+      ...link.deliveryType,
+      cost: link.costOverride != null ? Number(link.costOverride) : (link.deliveryType?.cost ?? 0)
+    }));
+  }
   return await prisma.deliveryType.findMany({
     where: { isActive: true },
     orderBy: { displayOrder: 'asc' }
@@ -143,22 +151,53 @@ export async function getBranchDeliveryTypes(branchId) {
 }
 
 /**
- * Actualiza los tipos de entrega de una sucursal.
- * @param {number} branchId - ID de la sucursal
- * @param {number[]} deliveryTypeIds - IDs de los tipos de entrega a vincular
- * @returns {Promise<Array>} - Tipos de entrega ahora vinculados
+ * Para admin: links de la sucursal con deliveryType y todos los tipos para poder agregar.
+ * @returns {{ links: Array<{ deliveryTypeId, deliveryType, isActive, costOverride, displayOrder }>, allDeliveryTypes: Array }}
  */
-export async function setBranchDeliveryTypes(branchId, deliveryTypeIds) {
+export async function getBranchDeliveryTypesForAdmin(branchId) {
+  if (!branchId) return { links: [], allDeliveryTypes: [] };
+  const [branch, allDeliveryTypes] = await Promise.all([
+    prisma.branch.findUnique({
+      where: { id: Number(branchId) },
+      include: {
+        deliveryTypeLinks: {
+          include: { deliveryType: true },
+          orderBy: { displayOrder: 'asc' }
+        }
+      }
+    }),
+    prisma.deliveryType.findMany({ orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }] })
+  ]);
+  const links = branch?.deliveryTypeLinks ?? [];
+  return { links, allDeliveryTypes: allDeliveryTypes ?? [] };
+}
+
+/**
+ * Actualiza los tipos de entrega de una sucursal (admin).
+ * @param {number} branchId - ID de la sucursal
+ * @param {Array<{ deliveryTypeId: number, isActive?: boolean, costOverride?: number|null, displayOrder?: number }>} links
+ * @returns {Promise<{ links, allDeliveryTypes }>}
+ */
+export async function setBranchDeliveryTypes(branchId, links) {
   const id = Number(branchId);
-  const ids = Array.isArray(deliveryTypeIds)
-    ? deliveryTypeIds.map((x) => Number(x)).filter((x) => !Number.isNaN(x))
-    : [];
+  const list = Array.isArray(links) ? links : [];
   await prisma.branchDeliveryType.deleteMany({ where: { branchId: id } });
-  if (ids.length > 0) {
-    await prisma.branchDeliveryType.createMany({
-      data: ids.map((deliveryTypeId) => ({ branchId: id, deliveryTypeId }))
-    });
+  if (list.length > 0) {
+    const data = list.map((item) => {
+      const deliveryTypeId = Number(item.deliveryTypeId);
+      if (Number.isNaN(deliveryTypeId)) return null;
+      return {
+        branchId: id,
+        deliveryTypeId,
+        isActive: item.isActive !== false,
+        costOverride: item.costOverride != null ? Number(item.costOverride) : null,
+        displayOrder: typeof item.displayOrder === 'number' ? item.displayOrder : 0
+      };
+    }).filter(Boolean);
+    if (data.length > 0) {
+      await prisma.branchDeliveryType.createMany({ data });
+    }
   }
-  return getBranchDeliveryTypes(id);
+  return getBranchDeliveryTypesForAdmin(id);
 }
 

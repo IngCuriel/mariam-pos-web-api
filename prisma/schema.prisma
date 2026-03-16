@@ -284,10 +284,13 @@ model DeliveryType {
   @@index([isActive])
 }
 
-// Relación many-to-many: cada sucursal puede tener uno o varios tipos de entrega
+// Relación many-to-many: cada sucursal puede tener uno o varios tipos de entrega con overrides
 model BranchDeliveryType {
   branchId       Int
   deliveryTypeId Int
+  isActive       Boolean @default(true)  // La sucursal puede activar/desactivar este tipo
+  costOverride   Float?                  // Si no null, usa este costo en lugar del del DeliveryType
+  displayOrder   Int     @default(0)     // Orden de visualización en esta sucursal
   branch        Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
   deliveryType  DeliveryType @relation(fields: [deliveryTypeId], references: [id], onDelete: Cascade)
 

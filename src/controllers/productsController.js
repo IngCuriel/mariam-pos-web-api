@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { getOrCreateBranch, getAllBranchesForAdmin, updateBranch as updateBranchService, getBranchDeliveryTypes as getBranchDeliveryTypesService, setBranchDeliveryTypes as setBranchDeliveryTypesService } from '../services/branchService.js';
+import { getOrCreateBranch, getAllBranchesForAdmin, updateBranch as updateBranchService, getBranchDeliveryTypesForAdmin, setBranchDeliveryTypes as setBranchDeliveryTypesService } from '../services/branchService.js';
 import { assignEmojiToProduct } from '../services/emojiService.js';
 const prisma = new PrismaClient();
 
@@ -848,25 +848,25 @@ export const updateBranch = async (req, res) => {
   }
 };
 
-// Obtener tipos de entrega configurados para una sucursal (solo admin)
+// Obtener tipos de entrega de una sucursal para admin (links con overrides + todos los tipos)
 export const getBranchDeliveryTypes = async (req, res) => {
   try {
     const { id } = req.params;
-    const types = await getBranchDeliveryTypesService(id);
-    res.json(types);
+    const result = await getBranchDeliveryTypesForAdmin(id);
+    res.json(result);
   } catch (error) {
     console.error('Error obteniendo tipos de entrega de sucursal:', error);
     res.status(500).json({ error: 'Error obteniendo tipos de entrega' });
   }
 };
 
-// Actualizar tipos de entrega de una sucursal (solo admin)
+// Actualizar tipos de entrega de una sucursal (solo admin). Body: { links: [{ deliveryTypeId, isActive?, costOverride?, displayOrder? }] }
 export const updateBranchDeliveryTypes = async (req, res) => {
   try {
     const { id } = req.params;
-    const { deliveryTypeIds } = req.body || {};
-    const types = await setBranchDeliveryTypesService(id, deliveryTypeIds);
-    res.json(types);
+    const { links } = req.body || {};
+    const result = await setBranchDeliveryTypesService(id, links);
+    res.json(result);
   } catch (error) {
     console.error('Error actualizando tipos de entrega de sucursal:', error);
     res.status(500).json({ error: 'Error actualizando tipos de entrega' });
