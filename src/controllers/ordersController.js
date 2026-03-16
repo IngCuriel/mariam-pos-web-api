@@ -5,13 +5,6 @@ import { OrderStatus } from '../constants/orderStatus.js';
 
 const prisma = new PrismaClient();
 
-// Generar folio único
-const generateFolio = () => {
-  const timestamp = Date.now().toString(36).toUpperCase();
-  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return `ORD-${timestamp}-${random}`;
-};
-
 // Tipos de entrega activos (configurables: recoger en sucursal, envío a domicilio, etc.)
 export const getDeliveryTypes = async (req, res) => {
   try {
@@ -64,7 +57,6 @@ export const createOrder = async (req, res) => {
 
     const order = await prisma.order.create({
       data: {
-        folio: generateFolio(),
         total,
         status: OrderStatus.UNDER_REVIEW,
         notes: notes || null,
