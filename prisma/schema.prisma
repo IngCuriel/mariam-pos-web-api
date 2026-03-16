@@ -311,6 +311,7 @@ model Order {
   confirmedAt        DateTime?     // Cuando el cliente acepta pedido actualizado
   readyAt            DateTime?     // Cuando admin marca "listo para recoger" o "en camino"
   deliveredAt        DateTime?     // Cuando admin marca "entregado"
+  cancellationReason String?     // Motivo de cancelación (por tienda o por cliente)
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 

@@ -93,12 +93,23 @@ export async function reviewAvailability(orderId, itemsPayload) {
 
     const newTotal = updatedItems.reduce((sum, i) => sum + i.subtotal, 0);
     const allAvailable = updatedItems.every((i) => i.isAvailable === true && (i.confirmedQuantity ?? i.quantity) >= i.quantity);
-    // Si todo está disponible, pasar a Disponible; el cliente debe confirmar antes de enviar o recoger (luego → IN_PREPARATION).
-    const newStatus = allAvailable ? OrderStatus.AVAILABLE : OrderStatus.PARTIALLY_AVAILABLE;
+    const noProductsAvailable = newTotal === 0 || updatedItems.every((i) => i.isAvailable === false);
+
+    let newStatus;
+    let cancellationReason = null;
+    if (noProductsAvailable) {
+      newStatus = OrderStatus.CANCELLED;
+      cancellationReason =
+        'No hay disponibilidad de los productos solicitados en este momento. Te invitamos a explorar otros productos.';
+    } else if (allAvailable) {
+      newStatus = OrderStatus.AVAILABLE;
+    } else {
+      newStatus = OrderStatus.PARTIALLY_AVAILABLE;
+    }
 
     await tx.order.update({
       where: { id },
-      data: { total: newTotal, status: newStatus },
+      data: { total: newTotal, status: newStatus, cancellationReason },
     });
   });
 
@@ -278,8 +289,12 @@ export async function markAsReady(orderId, readyAt) {
 
 /**
  * Cancelar pedido. Solo desde estados cancelables.
+ * @param {string|number} orderId
+ * @param {number} userId
+ * @param {boolean} isAdmin
+ * @param {string} [cancellationReason] - Motivo de cancelación (opcional)
  */
-export async function cancelOrder(orderId, userId, isAdmin) {
+export async function cancelOrder(orderId, userId, isAdmin, cancellationReason = null) {
   const id = parseInt(orderId);
   const order = await prisma.order.findUnique({
     where: { id },
@@ -308,10 +323,14 @@ export async function cancelOrder(orderId, userId, isAdmin) {
   }
 
   const previousStatus = order.status;
+  const reasonToSave =
+    cancellationReason && String(cancellationReason).trim()
+      ? String(cancellationReason).trim()
+      : null;
 
   const updatedOrder = await prisma.order.update({
     where: { id },
-    data: { status: newStatus },
+    data: { status: newStatus, cancellationReason: reasonToSave },
     include: orderInclude,
   });
 
