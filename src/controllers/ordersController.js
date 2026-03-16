@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { createStatusChangeNotification } from './notificationsController.js';
 import * as orderService from '../services/orderService.js';
 import { OrderStatus } from '../constants/orderStatus.js';
+import { getBranchDeliveryTypes } from '../services/branchService.js';
 
 const prisma = new PrismaClient();
 
@@ -12,13 +13,17 @@ const generateFolio = () => {
   return `ORD-${timestamp}-${random}`;
 };
 
-// Tipos de entrega activos (configurables: recoger en sucursal, envío a domicilio, etc.)
+// Tipos de entrega: si se envía branchId, solo los configurados para esa sucursal; si no, todos los activos
 export const getDeliveryTypes = async (req, res) => {
   try {
-    const types = await prisma.deliveryType.findMany({
-      where: { isActive: true },
-      orderBy: { displayOrder: 'asc' },
-    });
+    const branchId = req.query.branchId != null ? parseInt(req.query.branchId, 10) : null;
+    const types =
+      branchId && !Number.isNaN(branchId)
+        ? await getBranchDeliveryTypes(branchId)
+        : await prisma.deliveryType.findMany({
+            where: { isActive: true },
+            orderBy: { displayOrder: 'asc' },
+          });
     res.json(types);
   } catch (error) {
     console.error('Error obteniendo tipos de entrega:', error);
