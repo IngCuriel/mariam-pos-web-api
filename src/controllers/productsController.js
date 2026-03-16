@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { getOrCreateBranch, getAllBranchesForAdmin, updateBranch as updateBranchService } from '../services/branchService.js';
+import { getOrCreateBranch, getAllBranchesForAdmin, updateBranch as updateBranchService, getBranchDeliveryTypes as getBranchDeliveryTypesService, setBranchDeliveryTypes as setBranchDeliveryTypesService } from '../services/branchService.js';
 import { assignEmojiToProduct } from '../services/emojiService.js';
 const prisma = new PrismaClient();
 
@@ -845,6 +845,31 @@ export const updateBranch = async (req, res) => {
   } catch (error) {
     console.error('Error actualizando sucursal:', error);
     res.status(500).json({ error: 'Error actualizando sucursal' });
+  }
+};
+
+// Obtener tipos de entrega configurados para una sucursal (solo admin)
+export const getBranchDeliveryTypes = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const types = await getBranchDeliveryTypesService(id);
+    res.json(types);
+  } catch (error) {
+    console.error('Error obteniendo tipos de entrega de sucursal:', error);
+    res.status(500).json({ error: 'Error obteniendo tipos de entrega' });
+  }
+};
+
+// Actualizar tipos de entrega de una sucursal (solo admin)
+export const updateBranchDeliveryTypes = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { deliveryTypeIds } = req.body || {};
+    const types = await setBranchDeliveryTypesService(id, deliveryTypeIds);
+    res.json(types);
+  } catch (error) {
+    console.error('Error actualizando tipos de entrega de sucursal:', error);
+    res.status(500).json({ error: 'Error actualizando tipos de entrega' });
   }
 };
 

@@ -27,12 +27,13 @@ model Branch {
   updatedAt   DateTime @updatedAt
 
   // Relaciones
-  sales         Sale[]
-  products      Product[]
-  categories    Category[]
-  presentations ProductPresentation[]
-  inventories   Inventory[]
-  orders        Order[]
+  sales              Sale[]
+  products           Product[]
+  categories         Category[]
+  presentations      ProductPresentation[]
+  inventories        Inventory[]
+  orders             Order[]
+  deliveryTypeLinks  BranchDeliveryType[]
 
   @@index([name])
   @@index([isActive])
@@ -270,16 +271,29 @@ enum OrderStatus {
 
 // Tipos de entrega configurables (recoger en sucursal, envío a domicilio, etc.)
 model DeliveryType {
-  id          Int     @id @default(autoincrement())
-  code        String  @unique  // pickup | delivery
-  name        String  // "Recoger en sucursal" | "Envío a domicilio"
-  cost        Float   @default(0)
-  isActive    Boolean @default(true)
-  displayOrder Int    @default(0)
+  id           Int     @id @default(autoincrement())
+  code         String  @unique  // pickup | delivery
+  name         String  // "Recoger en sucursal" | "Envío a domicilio"
+  cost         Float   @default(0)
+  isActive     Boolean @default(true)
+  displayOrder Int     @default(0)
 
-  orders Order[]
+  orders      Order[]
+  branchLinks BranchDeliveryType[]
 
   @@index([isActive])
+}
+
+// Relación many-to-many: cada sucursal puede tener uno o varios tipos de entrega
+model BranchDeliveryType {
+  branchId       Int
+  deliveryTypeId Int
+  branch        Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  deliveryType  DeliveryType @relation(fields: [deliveryTypeId], references: [id], onDelete: Cascade)
+
+  @@id([branchId, deliveryTypeId])
+  @@index([branchId])
+  @@index([deliveryTypeId])
 }
 
 model OrderStatusHistory {

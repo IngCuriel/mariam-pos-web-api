@@ -18,7 +18,9 @@ import {
   deleteProductImage,
   reorderProductImages,
   getBranchesForConfig,
-  updateBranch
+  updateBranch,
+  getBranchDeliveryTypes,
+  updateBranchDeliveryTypes
 } from "../controllers/productsController.js";
 import { authenticate, requireAdmin } from "../middleware/auth.js";
 
@@ -29,6 +31,8 @@ router.post("/bulk", createProductsBulk);
 router.get("/all", getAllProducts); // Obtener todos los productos (con filtros opcionales)
 router.get("/branches", getAllBranches); // Obtener todas las sucursales únicas (DEBE ir antes de /:id)
 router.get("/config/branches", authenticate, requireAdmin, getBranchesForConfig); // Listado completo para config admin
+router.get("/config/branches/:id/delivery-types", authenticate, requireAdmin, getBranchDeliveryTypes); // Tipos de entrega de la sucursal
+router.put("/config/branches/:id/delivery-types", authenticate, requireAdmin, updateBranchDeliveryTypes); // Actualizar tipos de entrega de la sucursal
 router.patch("/branches/:id", authenticate, requireAdmin, updateBranch); // Activar/desactivar sucursal
 router.get("/branch/:branch", getProductsByBranch); // Debe ir antes de /:id para evitar conflictos
 router.get("/:id", getProductById); // Obtener un producto por ID

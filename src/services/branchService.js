@@ -16,7 +16,7 @@ export async function getOrCreateBranch(branchName) {
     where: { name: branchName }
   });
 
-  // Si no existe, crearla
+  // Si no existe, crearla y asignar por defecto todos los tipos de entrega activos
   if (!branch) {
     branch = await prisma.branch.create({
       data: {
@@ -25,6 +25,15 @@ export async function getOrCreateBranch(branchName) {
         isActive: true
       }
     });
+    const activeDeliveryTypes = await prisma.deliveryType.findMany({
+      where: { isActive: true },
+      select: { id: true }
+    });
+    if (activeDeliveryTypes.length > 0) {
+      await prisma.branchDeliveryType.createMany({
+        data: activeDeliveryTypes.map((dt) => ({ branchId: branch.id, deliveryTypeId: dt.id }))
+      });
+    }
     console.log(`✅ Sucursal creada: ${branchName} (ID: ${branch.id})`);
   }
 
@@ -103,5 +112,53 @@ export async function getBranchByName(branchName) {
   return await prisma.branch.findUnique({
     where: { name: branchName }
   });
+}
+
+/**
+ * Tipos de entrega vinculados a una sucursal (para config admin y para carrito por sucursal).
+ * Si la sucursal no tiene ninguno configurado, devuelve todos los activos (comportamiento por defecto).
+ * @param {number} branchId - ID de la sucursal
+ * @returns {Promise<Array<{id: number, code: string, name: string, cost: number, isActive: boolean, displayOrder: number}>>}
+ */
+export async function getBranchDeliveryTypes(branchId) {
+  if (!branchId) return [];
+  const branch = await prisma.branch.findUnique({
+    where: { id: Number(branchId) },
+    include: {
+      deliveryTypeLinks: {
+        include: { deliveryType: true },
+        orderBy: { deliveryType: { displayOrder: 'asc' } }
+      }
+    }
+  });
+  if (!branch) return [];
+  const types = branch.deliveryTypeLinks
+    .filter((link) => link.deliveryType?.isActive)
+    .map((link) => link.deliveryType);
+  if (types.length > 0) return types;
+  return await prisma.deliveryType.findMany({
+    where: { isActive: true },
+    orderBy: { displayOrder: 'asc' }
+  });
+}
+
+/**
+ * Actualiza los tipos de entrega de una sucursal.
+ * @param {number} branchId - ID de la sucursal
+ * @param {number[]} deliveryTypeIds - IDs de los tipos de entrega a vincular
+ * @returns {Promise<Array>} - Tipos de entrega ahora vinculados
+ */
+export async function setBranchDeliveryTypes(branchId, deliveryTypeIds) {
+  const id = Number(branchId);
+  const ids = Array.isArray(deliveryTypeIds)
+    ? deliveryTypeIds.map((x) => Number(x)).filter((x) => !Number.isNaN(x))
+    : [];
+  await prisma.branchDeliveryType.deleteMany({ where: { branchId: id } });
+  if (ids.length > 0) {
+    await prisma.branchDeliveryType.createMany({
+      data: ids.map((deliveryTypeId) => ({ branchId: id, deliveryTypeId }))
+    });
+  }
+  return getBranchDeliveryTypes(id);
 }
 
