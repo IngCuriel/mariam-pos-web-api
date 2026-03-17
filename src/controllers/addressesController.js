@@ -36,6 +36,8 @@ export const createAddress = async (req, res) => {
       });
     }
 
+    const lat = latitude != null && !Number.isNaN(Number(latitude)) ? Number(latitude) : null;
+    const lng = longitude != null && !Number.isNaN(Number(longitude)) ? Number(longitude) : null;
     const address = await prisma.userAddress.create({
       data: {
         userId,
@@ -46,6 +48,8 @@ export const createAddress = async (req, res) => {
         city: city.trim(),
         state: state?.trim() || null,
         references: references?.trim() || null,
+        latitude: lat,
+        longitude: lng,
         isDefault: Boolean(isDefault),
       },
     });
@@ -61,7 +65,7 @@ export const updateAddress = async (req, res) => {
   try {
     const userId = req.userId;
     const id = Number(req.params.id);
-    const { label, street, colony, postalCode, city, state, references, isDefault } = req.body || {};
+    const { label, street, colony, postalCode, city, state, references, isDefault, latitude, longitude } = req.body || {};
 
     const existing = await prisma.userAddress.findFirst({
       where: { id, userId },
@@ -77,6 +81,8 @@ export const updateAddress = async (req, res) => {
       });
     }
 
+    const lat = latitude !== undefined ? (latitude != null && !Number.isNaN(Number(latitude)) ? Number(latitude) : null) : existing.latitude;
+    const lng = longitude !== undefined ? (longitude != null && !Number.isNaN(Number(longitude)) ? Number(longitude) : null) : existing.longitude;
     const address = await prisma.userAddress.update({
       where: { id },
       data: {
@@ -87,6 +93,8 @@ export const updateAddress = async (req, res) => {
         ...(city !== undefined && { city: city?.trim() ?? existing.city }),
         ...(state !== undefined && { state: state?.trim() || null }),
         ...(references !== undefined && { references: references?.trim() || null }),
+        ...(latitude !== undefined && { latitude: lat }),
+        ...(longitude !== undefined && { longitude: lng }),
         ...(isDefault !== undefined && { isDefault: Boolean(isDefault) }),
       },
     });
