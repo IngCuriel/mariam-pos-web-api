@@ -21,7 +21,10 @@ export const getMyAddresses = async (req, res) => {
 export const createAddress = async (req, res) => {
   try {
     const userId = req.userId;
-    const { label, street, colony, postalCode, city, state, references, isDefault, latitude, longitude } = req.body || {};
+    const body = req.body || {};
+    const { label, street, colony, postalCode, city, state, references, isDefault } = body;
+    const latitude = body.latitude;
+    const longitude = body.longitude;
 
     if (!label?.trim() || !street?.trim() || !colony?.trim() || !postalCode?.trim() || !city?.trim()) {
       return res.status(400).json({
