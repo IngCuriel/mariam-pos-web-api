@@ -1102,7 +1102,11 @@ export const addBalance = async (req, res) => {
 // Obtener historial de saldo (solo admin)
 export const getBalanceHistory = async (req, res) => {
   try {
-    const { limit = 50, offset = 0 } = req.query;
+    const rawLimit = parseInt(req.query.limit, 10);
+    const rawOffset = parseInt(req.query.offset, 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 500) : 50;
+    const offset = Number.isFinite(rawOffset) ? Math.max(rawOffset, 0) : 0;
+    const { dateFrom, dateTo, onlyAbonos } = req.query;
 
     const config = await prisma.cashExpressConfig.findFirst();
     if (!config) {
@@ -1111,12 +1115,32 @@ export const getBalanceHistory = async (req, res) => {
       });
     }
 
+    const where = {
+      cashExpressConfigId: config.id,
+    };
+
+    if (onlyAbonos === 'true' || onlyAbonos === '1') {
+      where.amount = { gt: 0 };
+    }
+
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (dateFrom || dateTo) {
+      const createdAt = {};
+      if (dateFrom && dateRe.test(String(dateFrom))) {
+        createdAt.gte = new Date(`${dateFrom}T00:00:00.000Z`);
+      }
+      if (dateTo && dateRe.test(String(dateTo))) {
+        createdAt.lte = new Date(`${dateTo}T23:59:59.999Z`);
+      }
+      if (Object.keys(createdAt).length > 0) {
+        where.createdAt = createdAt;
+      }
+    }
+
     const history = await prisma.cashExpressBalanceHistory.findMany({
-      where: {
-        cashExpressConfigId: config.id,
-      },
-      take: parseInt(limit),
-      skip: parseInt(offset),
+      where,
+      take: limit,
+      skip: offset,
       orderBy: {
         createdAt: 'desc',
       },
@@ -1145,13 +1169,13 @@ export const getBalanceHistory = async (req, res) => {
       },
     });
 
-    const total = await prisma.cashExpressBalanceHistory.count();
+    const total = await prisma.cashExpressBalanceHistory.count({ where });
 
     res.json({
       history,
       total,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+      limit,
+      offset,
     });
   } catch (error) {
     console.error('Error obteniendo historial:', error);
