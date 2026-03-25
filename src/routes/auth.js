@@ -3,7 +3,8 @@ import {
   register,
   login,
   verifyToken,
-  getProfile
+  getProfile,
+  updateProfile,
 } from '../controllers/authController.js';
 import { authenticate } from '../middleware/auth.js';
 import { createAdmin } from '../controllers/setupController.js';
@@ -20,6 +21,7 @@ router.post('/setup-admin', createAdmin);
 
 // Rutas protegidas
 router.get('/profile', authenticate, getProfile);
+router.patch('/profile', authenticate, updateProfile);
 
 export default router;
 

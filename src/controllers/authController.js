@@ -236,3 +236,47 @@ export const getProfile = async (req, res) => {
   }
 };
 
+const MAX_NAME_LENGTH = 120;
+
+/** Actualizar perfil del cliente (solo nombre permitido desde la tienda web). */
+export const updateProfile = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { name } = req.body;
+
+    if (name == null || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({
+        error: 'El nombre es requerido',
+      });
+    }
+
+    const trimmed = name.trim();
+    if (trimmed.length > MAX_NAME_LENGTH) {
+      return res.status(400).json({
+        error: `El nombre no puede superar ${MAX_NAME_LENGTH} caracteres`,
+      });
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { name: trimmed },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        role: true,
+        registrationSource: true,
+        createdAt: true,
+      },
+    });
+
+    res.json(user);
+  } catch (error) {
+    console.error('Error actualizando perfil:', error);
+    res.status(500).json({
+      error: 'Error al actualizar perfil',
+    });
+  }
+};
+
