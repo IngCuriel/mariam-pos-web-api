@@ -1,80 +1,100 @@
 import { PrismaClient } from '@prisma/client';
 import { getOrCreateBranch } from '../services/branchService.js';
+import {
+  paddedUtcWindowForBusinessRange,
+  filterRowsByBusinessDateRange,
+  sqlUtcTimestampToBusinessDate,
+} from '../utils/businessTimezone.js';
+
 const prisma = new PrismaClient();
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidYyyyMmDd(value) {
+  return typeof value === 'string' && DATE_RE.test(value.trim());
+}
+
+function mapSaleRowWithBranch(sale) {
+  return {
+    id: sale.id,
+    folio: sale.folio,
+    total: sale.total,
+    status: sale.status,
+    branch: sale.branch?.name ?? 'Sin sucursal',
+    cashRegister: sale.cashRegister,
+    paymentMethod: sale.paymentMethod,
+    createdAt: sale.createdAt,
+    clientName: sale.clientName,
+    syncStatus: sale.syncStatus,
+    details: sale.details ?? [],
+  };
+}
+
+async function resolveBranchIdByName(branchName) {
+  if (!branchName) return null;
+  const branchObj = await prisma.branch.findUnique({
+    where: { name: branchName },
+  });
+  return branchObj ? branchObj.id : null;
+}
 
 // Obtener todas las ventas con filtros opcionales
 export const getSales = async (req, res) => {
   try {
     const { startDate, endDate, branch, paymentMethod } = req.query;
-    
-    // Ejecutar consulta - usar Prisma normal si no hay filtros de fecha
+
     let sales;
     if (startDate || endDate) {
-      // Con filtros de fecha, usar consulta raw para zona horaria
-      // Escapar valores de forma segura
-      let branchId = null;
-      if (branch) {
-        const branchObj = await prisma.branch.findUnique({
-          where: { name: branch }
+      const fromOk = isValidYyyyMmDd(startDate) ? startDate.trim() : null;
+      const toOk = isValidYyyyMmDd(endDate) ? endDate.trim() : null;
+      if ((startDate && !fromOk) || (endDate && !toOk)) {
+        return res.status(400).json({
+          error: 'Formato de fecha inválido. Use YYYY-MM-DD.',
         });
-        if (branchObj) {
-          branchId = branchObj.id;
-        }
       }
-      
-      const escapedPaymentMethod = paymentMethod ? `'${paymentMethod.replace(/'/g, "''")}'` : 'NULL';
-      
-      let conditions = [];
-      if (startDate) {
-        conditions.push(`(s."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::date >= '${startDate}'::date`);
+      if (!fromOk && !toOk) {
+        return res.status(400).json({
+          error: 'Indica al menos una fecha válida (YYYY-MM-DD).',
+        });
       }
-      if (endDate) {
-        conditions.push(`(s."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::date <= '${endDate}'::date`);
+
+      const rangeFrom = fromOk || toOk;
+      const rangeTo = toOk || fromOk;
+
+      const branchId = await resolveBranchIdByName(branch);
+
+      let padded;
+      try {
+        padded = paddedUtcWindowForBusinessRange(rangeFrom, rangeTo, 48);
+      } catch (e) {
+        return res.status(400).json({
+          error: e.message || 'Fechas inválidas',
+        });
       }
-      if (branchId) {
-        conditions.push(`s."branchId" = ${branchId}`);
+
+      const where = {
+        createdAt: {
+          gte: padded.gte,
+          lte: padded.lte,
+        },
+      };
+      if (branchId) where.branchId = branchId;
+      if (paymentMethod) where.paymentMethod = paymentMethod;
+
+      const maxFetch = 15000;
+      const candidates = await prisma.sale.findMany({
+        where,
+        include: { details: true, branch: true },
+        orderBy: { createdAt: 'desc' },
+        take: maxFetch,
+      });
+
+      const filtered = filterRowsByBusinessDateRange(candidates, rangeFrom, rangeTo);
+      sales = filtered.map(mapSaleRowWithBranch);
+
+      if (candidates.length === maxFetch) {
+        res.setHeader('X-Query-Truncated', '1');
       }
-      if (paymentMethod) {
-        conditions.push(`s."paymentMethod" = ${escapedPaymentMethod}`);
-      }
-      
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-      
-      const query = `
-        SELECT 
-          s.id,
-          s.folio,
-          s.total,
-          s.status,
-          COALESCE(b.name, 'Sin sucursal') as branch,
-          s."cashRegister",
-          s."paymentMethod",
-          s."createdAt",
-          s."clientName",
-          s."syncStatus",
-          COALESCE(
-            json_agg(
-              json_build_object(
-                'id', sd.id,
-                'quantity', sd.quantity,
-                'price', sd.price,
-                'subTotal', sd."subTotal",
-                'productName', sd."productName",
-                'createdAt', sd."createdAt",
-                'saleId', sd."saleId"
-              )
-            ) FILTER (WHERE sd.id IS NOT NULL),
-            '[]'::json
-          ) as details
-        FROM "Sale" s
-        LEFT JOIN "Branch" b ON s."branchId" = b.id
-        LEFT JOIN "SaleDetail" sd ON sd."saleId" = s.id
-        ${whereClause}
-        GROUP BY s.id, b.name
-        ORDER BY s.id DESC
-      `;
-      
-      sales = await prisma.$queryRawUnsafe(query);
     } else {
       // Sin filtros de fecha, usar Prisma normal
       const where = {};
@@ -91,13 +111,14 @@ export const getSales = async (req, res) => {
       }
       if (paymentMethod) where.paymentMethod = paymentMethod;
       
-      sales = await prisma.sale.findMany({
+      const rows = await prisma.sale.findMany({
         where: Object.keys(where).length > 0 ? where : undefined,
-        orderBy: { id: "desc" },
-        include: { details: true },
+        orderBy: { id: 'desc' },
+        include: { details: true, branch: true },
       });
+      sales = rows.map(mapSaleRowWithBranch);
     }
-    
+
     res.json(sales);
   } catch (error) {
     console.error('Error obteniendo ventas:', error);
@@ -227,20 +248,23 @@ export const createSalesWithDetails = async (req, res) => {
 export const getSalesStats = async (req, res) => {
   try {
     const { startDate, endDate, branch } = req.query;
-    
-    // Construir condiciones WHERE con zona horaria
+
+    const dateExpr = sqlUtcTimestampToBusinessDate('s');
+
     let whereConditions = [];
-    
+
     if (startDate) {
-      whereConditions.push(
-        `(s."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::date >= '${startDate}'::date`
-      );
+      if (!isValidYyyyMmDd(startDate)) {
+        return res.status(400).json({ error: 'Formato de fecha inválido (startDate). Use YYYY-MM-DD.' });
+      }
+      whereConditions.push(`${dateExpr} >= '${startDate.trim()}'::date`);
     }
-    
+
     if (endDate) {
-      whereConditions.push(
-        `(s."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::date <= '${endDate}'::date`
-      );
+      if (!isValidYyyyMmDd(endDate)) {
+        return res.status(400).json({ error: 'Formato de fecha inválido (endDate). Use YYYY-MM-DD.' });
+      }
+      whereConditions.push(`${dateExpr} <= '${endDate.trim()}'::date`);
     }
     
     if (branch) {
@@ -300,15 +324,15 @@ export const getSalesStats = async (req, res) => {
         GROUP BY s."paymentMethod"`
       ),
       
-      // Ventas por día con zona horaria de México
+      // Ventas por día (día civil en zona de negocio)
       prisma.$queryRawUnsafe(
         `SELECT 
-          (s."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::date as date,
+          ${dateExpr} as date,
           COUNT(*) as count,
           COALESCE(SUM(s.total), 0) as total
         FROM "Sale" s
         ${whereClause}
-        GROUP BY (s."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::date
+        GROUP BY ${dateExpr}
         ORDER BY date DESC
         LIMIT 30`
       ),
@@ -364,19 +388,22 @@ export const getBranchStats = async (req, res) => {
       return res.status(404).json({ error: 'Sucursal no encontrada' });
     }
     
-    // Construir condiciones WHERE con zona horaria
+    const dateExpr = sqlUtcTimestampToBusinessDate('s');
+
     let whereConditions = [`s."branchId" = ${branchObj.id}`];
-    
+
     if (startDate) {
-      whereConditions.push(
-        `(s."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::date >= '${startDate}'::date`
-      );
+      if (!isValidYyyyMmDd(startDate)) {
+        return res.status(400).json({ error: 'Formato de fecha inválido (startDate). Use YYYY-MM-DD.' });
+      }
+      whereConditions.push(`${dateExpr} >= '${startDate.trim()}'::date`);
     }
-    
+
     if (endDate) {
-      whereConditions.push(
-        `(s."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::date <= '${endDate}'::date`
-      );
+      if (!isValidYyyyMmDd(endDate)) {
+        return res.status(400).json({ error: 'Formato de fecha inválido (endDate). Use YYYY-MM-DD.' });
+      }
+      whereConditions.push(`${dateExpr} <= '${endDate.trim()}'::date`);
     }
     
     const whereClause = `WHERE ${whereConditions.join(' AND ')}`;

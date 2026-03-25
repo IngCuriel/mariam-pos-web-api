@@ -83,3 +83,18 @@ export function paddedUtcWindowForBusinessRange(dateFrom, dateTo, padHours = 48)
     lte: new Date(end.getTime() + padMs),
   };
 }
+
+const SAFE_TZ_RE = /^[A-Za-z0-9_\-\/]+$/;
+
+/**
+ * Expresión SQL: fecha civil (DATE) en BUSINESS_TIMEZONE desde columna createdAt (naive = UTC).
+ * @param {string} tableAlias — alias de tabla, ej. 's'
+ */
+export function sqlUtcTimestampToBusinessDate(tableAlias = 's') {
+  const tz =
+    typeof BUSINESS_TIMEZONE === 'string' && SAFE_TZ_RE.test(BUSINESS_TIMEZONE)
+      ? BUSINESS_TIMEZONE
+      : 'America/Mexico_City';
+  const escaped = tz.replace(/'/g, "''");
+  return `(${tableAlias}."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE '${escaped}')::date`;
+}
