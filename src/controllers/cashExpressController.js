@@ -1,5 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { createStatusChangeNotification } from './notificationsController.js';
+import {
+  startOfBusinessDayUtc,
+  endOfBusinessDayUtc,
+} from '../utils/businessTimezone.js';
 
 const prisma = new PrismaClient();
 
@@ -1126,11 +1130,17 @@ export const getBalanceHistory = async (req, res) => {
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
     if (dateFrom || dateTo) {
       const createdAt = {};
-      if (dateFrom && dateRe.test(String(dateFrom))) {
-        createdAt.gte = new Date(`${dateFrom}T00:00:00.000Z`);
-      }
-      if (dateTo && dateRe.test(String(dateTo))) {
-        createdAt.lte = new Date(`${dateTo}T23:59:59.999Z`);
+      try {
+        if (dateFrom && dateRe.test(String(dateFrom))) {
+          createdAt.gte = startOfBusinessDayUtc(String(dateFrom));
+        }
+        if (dateTo && dateRe.test(String(dateTo))) {
+          createdAt.lte = endOfBusinessDayUtc(String(dateTo));
+        }
+      } catch (e) {
+        return res.status(400).json({
+          error: e.message || 'Fechas inválidas',
+        });
       }
       if (Object.keys(createdAt).length > 0) {
         where.createdAt = createdAt;
