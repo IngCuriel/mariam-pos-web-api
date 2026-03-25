@@ -1,8 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import { createStatusChangeNotification } from './notificationsController.js';
 import {
-  startOfBusinessDayUtc,
-  endOfBusinessDayUtc,
+  paddedUtcWindowForBusinessRange,
+  filterRowsByBusinessDateRange,
 } from '../utils/businessTimezone.js';
 
 const prisma = new PrismaClient();
@@ -1128,23 +1128,73 @@ export const getBalanceHistory = async (req, res) => {
     }
 
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
-    if (dateFrom || dateTo) {
-      const createdAt = {};
+    const fromOk = dateFrom && dateRe.test(String(dateFrom)) ? String(dateFrom) : null;
+    const toOk = dateTo && dateRe.test(String(dateTo)) ? String(dateTo) : null;
+
+    /** Con fechas: traemos ventana UTC amplia y filtramos por día civil en México (misma lógica que la UI). */
+    if (fromOk || toOk) {
+      const rangeFrom = fromOk || toOk;
+      const rangeTo = toOk || fromOk;
+      let padded;
       try {
-        if (dateFrom && dateRe.test(String(dateFrom))) {
-          createdAt.gte = startOfBusinessDayUtc(String(dateFrom));
-        }
-        if (dateTo && dateRe.test(String(dateTo))) {
-          createdAt.lte = endOfBusinessDayUtc(String(dateTo));
-        }
+        padded = paddedUtcWindowForBusinessRange(rangeFrom, rangeTo, 48);
       } catch (e) {
         return res.status(400).json({
           error: e.message || 'Fechas inválidas',
         });
       }
-      if (Object.keys(createdAt).length > 0) {
-        where.createdAt = createdAt;
-      }
+
+      const whereWithWindow = {
+        ...where,
+        createdAt: {
+          gte: padded.gte,
+          lte: padded.lte,
+        },
+      };
+
+      const maxFetch = 10000;
+      const candidates = await prisma.cashExpressBalanceHistory.findMany({
+        where: whereWithWindow,
+        take: maxFetch,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          cashExpressRequest: {
+            select: {
+              id: true,
+              folio: true,
+              amount: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const filtered = filterRowsByBusinessDateRange(candidates, rangeFrom, rangeTo);
+      const total = filtered.length;
+      const history = filtered.slice(offset, offset + limit);
+
+      return res.json({
+        history,
+        total,
+        limit,
+        offset,
+        truncated: candidates.length === maxFetch,
+      });
     }
 
     const history = await prisma.cashExpressBalanceHistory.findMany({
