@@ -184,10 +184,9 @@ export const getOrders = async (req, res) => {
 
     const DATE_FILTER_CREATED = 'createdAt';
     const DATE_FILTER_DELIVERED = 'deliveredAt';
+    const dateFieldNorm = String(dateFieldQuery || '').trim().toLowerCase();
     const dateField =
-      String(dateFieldQuery || '').toLowerCase() === DATE_FILTER_DELIVERED
-        ? DATE_FILTER_DELIVERED
-        : DATE_FILTER_CREATED;
+      dateFieldNorm === 'deliveredat' ? DATE_FILTER_DELIVERED : DATE_FILTER_CREATED;
 
     let rangeBounds;
     const fromRaw = dateFrom != null ? String(dateFrom).trim().slice(0, 10) : '';
@@ -200,16 +199,18 @@ export const getOrders = async (req, res) => {
         });
       }
       const start = DateTime.fromISO(fromRaw, { zone: MEXICO_TZ }).startOf('day');
-      const end = DateTime.fromISO(toRaw, { zone: MEXICO_TZ }).endOf('day');
-      if (!start.isValid || !end.isValid) {
+      const endDay = DateTime.fromISO(toRaw, { zone: MEXICO_TZ }).startOf('day');
+      if (!start.isValid || !endDay.isValid) {
         return res.status(400).json({ error: 'Fechas inválidas. Use formato YYYY-MM-DD.' });
       }
-      if (start > end) {
+      if (start > endDay) {
         return res.status(400).json({ error: 'La fecha inicial no puede ser posterior a la final.' });
       }
+      // [start, endExclusive) en zona México: incluye todo el último día (p. ej. 22:30) sin depender de endOf('day')/lte.
+      const endExclusive = endDay.plus({ days: 1 }).startOf('day');
       rangeBounds = {
         gte: start.toJSDate(),
-        lte: end.toJSDate(),
+        lt: endExclusive.toJSDate(),
       };
     }
 
