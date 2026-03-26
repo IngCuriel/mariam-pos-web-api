@@ -176,13 +176,20 @@ export const getOrders = async (req, res) => {
   try {
     const userId = req.userId;
     const userRole = req.userRole;
-    const { status, page: pageStr, limit: limitStr, dateFrom, dateTo } = req.query;
+    const { status, page: pageStr, limit: limitStr, dateFrom, dateTo, dateField: dateFieldQuery } = req.query;
 
     if (status && !VALID_ORDER_STATUSES.has(status)) {
       return res.status(400).json({ error: 'Estado de pedido no válido' });
     }
 
-    let createdAtFilter;
+    const DATE_FILTER_CREATED = 'createdAt';
+    const DATE_FILTER_DELIVERED = 'deliveredAt';
+    const dateField =
+      String(dateFieldQuery || '').toLowerCase() === DATE_FILTER_DELIVERED
+        ? DATE_FILTER_DELIVERED
+        : DATE_FILTER_CREATED;
+
+    let rangeBounds;
     const fromRaw = dateFrom != null ? String(dateFrom).trim().slice(0, 10) : '';
     const toRaw = dateTo != null ? String(dateTo).trim().slice(0, 10) : '';
 
@@ -200,7 +207,7 @@ export const getOrders = async (req, res) => {
       if (start > end) {
         return res.status(400).json({ error: 'La fecha inicial no puede ser posterior a la final.' });
       }
-      createdAtFilter = {
+      rangeBounds = {
         gte: start.toJSDate(),
         lte: end.toJSDate(),
       };
@@ -208,20 +215,29 @@ export const getOrders = async (req, res) => {
 
     const page = Math.max(1, parseInt(pageStr, 10) || 1);
     let limit = parseInt(limitStr, 10) || DEFAULT_LIMIT;
-    const maxLimit = createdAtFilter ? MAX_LIMIT_WITH_DATE_RANGE : MAX_LIMIT;
+    const maxLimit = rangeBounds ? MAX_LIMIT_WITH_DATE_RANGE : MAX_LIMIT;
     limit = Math.min(maxLimit, Math.max(1, limit));
     const skip = (page - 1) * limit;
 
     const where = {
       ...(userRole === 'CLIENTE' ? { userId } : {}),
       ...(status ? { status } : {}),
-      ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
+      ...(rangeBounds
+        ? dateField === DATE_FILTER_DELIVERED
+          ? { deliveredAt: rangeBounds }
+          : { createdAt: rangeBounds }
+        : {}),
     };
+
+    const orderBy =
+      rangeBounds && dateField === DATE_FILTER_DELIVERED
+        ? { deliveredAt: 'desc' }
+        : { createdAt: 'desc' };
 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip,
         take: limit,
         include: {
