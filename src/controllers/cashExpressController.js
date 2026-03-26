@@ -1,8 +1,11 @@
+import { DateTime } from 'luxon';
 import { PrismaClient } from '@prisma/client';
 import { createStatusChangeNotification } from './notificationsController.js';
 import {
   paddedUtcWindowForBusinessRange,
   filterRowsByBusinessDateRange,
+  BUSINESS_TIMEZONE,
+  middayBusinessDayUtc,
 } from '../utils/businessTimezone.js';
 
 const prisma = new PrismaClient();
@@ -1048,12 +1051,45 @@ export const getSuggestedAvailability = async (req, res) => {
 export const addBalance = async (req, res) => {
   try {
     const userId = req.userId;
-    const { amount, description } = req.body;
+    const { amount, description, registrationDate } = req.body;
 
     if (!amount || amount <= 0) {
       return res.status(400).json({
         error: 'El monto debe ser mayor a 0',
       });
+    }
+
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    let createdAtForHistory = null;
+    if (registrationDate != null && String(registrationDate).trim() !== '') {
+      const rd = String(registrationDate).trim();
+      if (!dateRe.test(rd)) {
+        return res.status(400).json({
+          error: 'registrationDate inválida (use YYYY-MM-DD)',
+        });
+      }
+      const todayMx = DateTime.now().setZone(BUSINESS_TIMEZONE).toFormat('yyyy-LL-dd');
+      if (rd > todayMx) {
+        return res.status(400).json({
+          error: 'La fecha de registro no puede ser futura',
+        });
+      }
+      const oldestMx = DateTime.now()
+        .setZone(BUSINESS_TIMEZONE)
+        .minus({ days: 730 })
+        .toFormat('yyyy-LL-dd');
+      if (rd < oldestMx) {
+        return res.status(400).json({
+          error: 'La fecha de registro es demasiado antigua (máx. 2 años)',
+        });
+      }
+      try {
+        createdAtForHistory = middayBusinessDayUtc(rd);
+      } catch (e) {
+        return res.status(400).json({
+          error: e.message || 'Fecha de registro inválida',
+        });
+      }
     }
 
     // Obtener configuración
@@ -1084,6 +1120,7 @@ export const addBalance = async (req, res) => {
         newBalance,
         userId,
         cashExpressConfigId: config.id,
+        ...(createdAtForHistory ? { createdAt: createdAtForHistory } : {}),
       },
     });
 

@@ -44,6 +44,26 @@ export function endOfBusinessDayUtc(yyyyMmDd) {
 }
 
 /**
+ * Mediodía civil YYYY-MM-DD en zona de negocio → UTC (historial alineado al día).
+ * @param {string} yyyyMmDd
+ * @returns {Date}
+ */
+export function middayBusinessDayUtc(yyyyMmDd) {
+  const [y, mo, d] = yyyyMmDd.split('-').map((n) => parseInt(n, 10));
+  if (!y || !mo || !d) {
+    throw new Error(`Fecha inválida: ${yyyyMmDd}`);
+  }
+  const dt = DateTime.fromObject(
+    { year: y, month: mo, day: d, hour: 12, minute: 0, second: 0, millisecond: 0 },
+    { zone: BUSINESS_TIMEZONE }
+  );
+  if (!dt.isValid) {
+    throw new Error(`Fecha inválida: ${yyyyMmDd}`);
+  }
+  return dt.toUTC().toJSDate();
+}
+
+/**
  * Fecha civil YYYY-MM-DD en zona de negocio a partir del instante guardado en BD.
  * @param {Date} jsDate
  * @returns {string}
