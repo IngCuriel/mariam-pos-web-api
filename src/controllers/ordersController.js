@@ -1,8 +1,12 @@
 import { PrismaClient } from '@prisma/client';
+import { DateTime } from 'luxon';
 import { createStatusChangeNotification } from './notificationsController.js';
 import * as orderService from '../services/orderService.js';
 import { OrderStatus } from '../constants/orderStatus.js';
 import { getBranchDeliveryTypes } from '../services/branchService.js';
+
+/** Calendario de filtro por fecha: día completo en Ciudad de México → UTC en BD. */
+const MEXICO_TZ = 'America/Mexico_City';
 
 const prisma = new PrismaClient();
 
@@ -164,21 +168,54 @@ export const getOrderCounts = async (req, res) => {
 // Obtener pedidos del usuario (o todas si es admin) con paginación
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
+const MAX_LIMIT_WITH_DATE_RANGE = 100;
+
+const VALID_ORDER_STATUSES = new Set(Object.values(OrderStatus));
 
 export const getOrders = async (req, res) => {
   try {
     const userId = req.userId;
     const userRole = req.userRole;
-    const { status, page: pageStr, limit: limitStr } = req.query;
+    const { status, page: pageStr, limit: limitStr, dateFrom, dateTo } = req.query;
+
+    if (status && !VALID_ORDER_STATUSES.has(status)) {
+      return res.status(400).json({ error: 'Estado de pedido no válido' });
+    }
+
+    let createdAtFilter;
+    const fromRaw = dateFrom != null ? String(dateFrom).trim().slice(0, 10) : '';
+    const toRaw = dateTo != null ? String(dateTo).trim().slice(0, 10) : '';
+
+    if (fromRaw || toRaw) {
+      if (!fromRaw || !toRaw) {
+        return res.status(400).json({
+          error: 'Para filtrar por fecha envía dateFrom y dateTo en formato YYYY-MM-DD (calendario hora de México).',
+        });
+      }
+      const start = DateTime.fromISO(fromRaw, { zone: MEXICO_TZ }).startOf('day');
+      const end = DateTime.fromISO(toRaw, { zone: MEXICO_TZ }).endOf('day');
+      if (!start.isValid || !end.isValid) {
+        return res.status(400).json({ error: 'Fechas inválidas. Use formato YYYY-MM-DD.' });
+      }
+      if (start > end) {
+        return res.status(400).json({ error: 'La fecha inicial no puede ser posterior a la final.' });
+      }
+      createdAtFilter = {
+        gte: start.toJSDate(),
+        lte: end.toJSDate(),
+      };
+    }
 
     const page = Math.max(1, parseInt(pageStr, 10) || 1);
     let limit = parseInt(limitStr, 10) || DEFAULT_LIMIT;
-    limit = Math.min(MAX_LIMIT, Math.max(1, limit));
+    const maxLimit = createdAtFilter ? MAX_LIMIT_WITH_DATE_RANGE : MAX_LIMIT;
+    limit = Math.min(maxLimit, Math.max(1, limit));
     const skip = (page - 1) * limit;
 
     const where = {
       ...(userRole === 'CLIENTE' ? { userId } : {}),
-      ...(status ? { status } : {})
+      ...(status ? { status } : {}),
+      ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
     };
 
     const [orders, total] = await Promise.all([
