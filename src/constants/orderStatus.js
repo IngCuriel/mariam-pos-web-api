@@ -21,8 +21,9 @@ export const ORDER_STATUS_TRANSITIONS = {
   [OrderStatus.PARTIALLY_AVAILABLE]: [OrderStatus.IN_PREPARATION, OrderStatus.CANCELLED],
   [OrderStatus.AVAILABLE]: [OrderStatus.IN_PREPARATION, OrderStatus.CANCELLED],
   [OrderStatus.IN_PREPARATION]: [OrderStatus.READY_FOR_PICKUP, OrderStatus.IN_TRANSIT, OrderStatus.CANCELLED],
-  [OrderStatus.READY_FOR_PICKUP]: [OrderStatus.COMPLETED],
-  [OrderStatus.IN_TRANSIT]: [OrderStatus.COMPLETED],
+  // Admin/cliente pueden cancelar si aún no se completó (ej. no-show, devolución en ruta).
+  [OrderStatus.READY_FOR_PICKUP]: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
+  [OrderStatus.IN_TRANSIT]: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
   [OrderStatus.COMPLETED]: [],
   [OrderStatus.CANCELLED]: [],
 };
