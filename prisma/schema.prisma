@@ -219,6 +219,8 @@ model User {
   role               UserRole            @default(CLIENTE)
   registrationSource RegistrationSource? // Origen del registro: WEB o APP
   isActive           Boolean             @default(true)
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 

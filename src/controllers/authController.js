@@ -1,9 +1,28 @@
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import { sendPasswordResetEmail } from '../services/emailService.js';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const PASSWORD_RESET_EXPIRY_MS = 60 * 60 * 1000;
+const GENERIC_FORGOT_PASSWORD_MESSAGE =
+  'Si el correo está registrado, recibirás un enlace para restablecer tu contraseña en los próximos minutos.';
+
+function hashResetToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function getStoreClientBaseUrl() {
+  const url = process.env.STORE_CLIENT_URL?.trim();
+  if (url) return url.replace(/\/$/, '');
+  return 'http://localhost:5173';
+}
+
+function isValidEmail(value) {
+  return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
 
 // Generar token JWT
 const generateToken = (userId, role) => {
@@ -277,6 +296,122 @@ export const updateProfile = async (req, res) => {
     res.status(500).json({
       error: 'Error al actualizar perfil',
     });
+  }
+};
+
+/** Solicitar enlace de recuperación de contraseña (respuesta genérica por seguridad). */
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({ error: 'Ingresa un correo electrónico válido' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true, email: true, name: true, isActive: true },
+    });
+
+    if (user?.isActive) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = hashResetToken(rawToken);
+      const expiresAt = new Date(Date.now() + PASSWORD_RESET_EXPIRY_MS);
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordResetToken: tokenHash,
+          passwordResetExpires: expiresAt,
+        },
+      });
+
+      const resetUrl = `${getStoreClientBaseUrl()}/reset-password?token=${rawToken}`;
+      try {
+        await sendPasswordResetEmail({
+          to: user.email,
+          name: user.name,
+          resetUrl,
+        });
+      } catch (emailError) {
+        console.error('Error enviando correo de recuperación:', emailError);
+      }
+    }
+
+    res.json({ message: GENERIC_FORGOT_PASSWORD_MESSAGE });
+  } catch (error) {
+    console.error('Error en forgotPassword:', error);
+    res.status(500).json({ error: 'No se pudo procesar la solicitud. Intenta más tarde.' });
+  }
+};
+
+/** Validar token de recuperación antes de mostrar el formulario. */
+export const validateResetToken = async (req, res) => {
+  try {
+    const token = typeof req.query.token === 'string' ? req.query.token.trim() : '';
+    if (!token) {
+      return res.status(400).json({ valid: false, error: 'Token requerido' });
+    }
+
+    const user = await findUserByResetToken(token);
+    if (!user) {
+      return res.status(400).json({ valid: false, error: 'El enlace no es válido o ya expiró' });
+    }
+
+    res.json({ valid: true });
+  } catch (error) {
+    console.error('Error validando token de recuperación:', error);
+    res.status(500).json({ valid: false, error: 'Error al validar el enlace' });
+  }
+};
+
+async function findUserByResetToken(rawToken) {
+  const tokenHash = hashResetToken(rawToken);
+  const now = new Date();
+  return prisma.user.findFirst({
+    where: {
+      passwordResetToken: tokenHash,
+      passwordResetExpires: { gt: now },
+      isActive: true,
+    },
+    select: { id: true },
+  });
+}
+
+/** Restablecer contraseña con token del correo. */
+export const resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    const rawToken = typeof token === 'string' ? token.trim() : '';
+
+    if (!rawToken) {
+      return res.status(400).json({ error: 'Token inválido' });
+    }
+
+    if (!password || typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    }
+
+    const user = await findUserByResetToken(rawToken);
+    if (!user) {
+      return res.status(400).json({ error: 'El enlace no es válido o ya expiró. Solicita uno nuevo.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+      },
+    });
+
+    res.json({ message: 'Contraseña actualizada. Ya puedes iniciar sesión.' });
+  } catch (error) {
+    console.error('Error en resetPassword:', error);
+    res.status(500).json({ error: 'No se pudo restablecer la contraseña' });
   }
 };
 
