@@ -7,32 +7,37 @@ async function main() {
   console.log('🌱 Iniciando seed de base de datos...');
 
   // Crear usuario admin por defecto
-  const adminEmail = 'admin@mariamstore.com';
   const adminPassword = 'admin123';
-  
-  const existingAdmin = await prisma.user.findUnique({
-    where: { email: adminEmail }
-  });
+  const defaultAdmins = [
+    { email: 'admin@mariamstore.com', name: 'Administrador' },
+    { email: 'superadmin@mariamstore.com', name: 'Super Administrador' },
+  ];
 
-  if (!existingAdmin) {
-    const hashedPassword = await bcrypt.hash(adminPassword, 10);
-    
-    const admin = await prisma.user.create({
-      data: {
-        email: adminEmail,
-        name: 'Administrador',
-        password: hashedPassword,
-        role: 'ADMIN',
-        isActive: true
-      }
+  const hashedAdminPassword = await bcrypt.hash(adminPassword, 10);
+
+  for (const adminUser of defaultAdmins) {
+    const existingAdmin = await prisma.user.findUnique({
+      where: { email: adminUser.email },
     });
 
-    console.log('✅ Usuario admin creado:');
-    console.log(`   Email: ${adminEmail}`);
-    console.log(`   Contraseña: ${adminPassword}`);
-    console.log(`   ID: ${admin.id}`);
-  } else {
-    console.log('ℹ️  Usuario admin ya existe');
+    if (!existingAdmin) {
+      const admin = await prisma.user.create({
+        data: {
+          email: adminUser.email,
+          name: adminUser.name,
+          password: hashedAdminPassword,
+          role: 'ADMIN',
+          isActive: true,
+        },
+      });
+
+      console.log('✅ Usuario admin creado:');
+      console.log(`   Email: ${adminUser.email}`);
+      console.log(`   Contraseña: ${adminPassword}`);
+      console.log(`   ID: ${admin.id}`);
+    } else {
+      console.log(`ℹ️  Usuario admin ya existe: ${adminUser.email}`);
+    }
   }
 
   // Crear usuario cliente de prueba

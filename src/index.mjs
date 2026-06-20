@@ -6,43 +6,60 @@ import bcrypt from 'bcryptjs';
 
 config();
 
-// Crear usuario admin por defecto si no existe (solo en desarrollo)
+// Crear usuarios admin por defecto si no existen (arranque / deploy)
 const prisma = new PrismaClient();
-async function ensureAdminUser() {
-  try {
-    const adminEmail = 'admin@mariamstore.com';
-    const existingAdmin = await prisma.user.findUnique({
-      where: { email: adminEmail }
-    });
 
-    if (!existingAdmin) {
-      const hashedPassword = await bcrypt.hash('admin123', 10);
-      await prisma.user.create({
-        data: {
-          email: adminEmail,
-          name: 'Administrador',
-          password: hashedPassword,
-          role: 'ADMIN',
-          isActive: true
-        }
+const DEFAULT_ADMIN_PASSWORD = 'admin123';
+const DEFAULT_ADMIN_USERS = [
+  { email: 'admin@mariamstore.com', name: 'Administrador' },
+  { email: 'superadmin@mariamstore.com', name: 'Super Administrador' },
+];
+
+async function ensureDefaultAdminUser({ email, name, passwordHash }) {
+  const existing = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (existing) {
+    console.log(`ℹ️  Usuario admin ya existe: ${email}`);
+    return;
+  }
+
+  await prisma.user.create({
+    data: {
+      email,
+      name,
+      password: passwordHash,
+      role: 'ADMIN',
+      isActive: true,
+    },
+  });
+
+  console.log(`✅ Usuario admin creado: ${email}`);
+}
+
+async function ensureAdminUsers() {
+  try {
+    const passwordHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10);
+
+    for (const adminUser of DEFAULT_ADMIN_USERS) {
+      await ensureDefaultAdminUser({
+        email: adminUser.email,
+        name: adminUser.name,
+        passwordHash,
       });
-      console.log('✅ Usuario admin creado automáticamente:');
-      console.log('   Email: admin@mariamstore.com');
-      console.log('   Contraseña: admin123');
-    } else {
-      console.log('ℹ️  Usuario admin ya existe');
     }
   } catch (error) {
     // Si la tabla no existe aún, solo mostrar advertencia
     if (error.code === 'P2021' || error.code === 'P2001') {
       console.log('⚠️  Tabla User no existe aún. Ejecuta la migración primero: npx prisma migrate dev');
     } else {
-      console.error('⚠️  Error creando usuario admin:', error.message);
+      console.error('⚠️  Error creando usuarios admin:', error.message);
       console.log('💡 Puedes crear el admin manualmente con: POST /api/auth/setup-admin');
     }
   }
 }
-ensureAdminUser();
+ensureAdminUsers();
 
 // Configuración del servidor
 // -------------------
