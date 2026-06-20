@@ -303,7 +303,8 @@ export const getOrderById = async (req, res) => {
       });
     }
 
-    res.json(order);
+    const responseOrder = orderService.mapOrderForGetByIdResponse(order, req.user?.email);
+    res.json(responseOrder);
   } catch (error) {
     console.error('Error obteniendo pedido:', error);
     res.status(500).json({

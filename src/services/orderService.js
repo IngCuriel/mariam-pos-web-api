@@ -13,6 +13,41 @@ const orderInclude = {
   statusHistory: { orderBy: { createdAt: 'asc' } },
 };
 
+/** Admin de cajero/entrega: vista operativa de ítems confirmados. */
+const OPERATIONAL_ITEMS_VIEWER_EMAIL = 'admin@mariamstore.com';
+const OPERATIONAL_ITEMS_STATUSES = new Set([
+  OrderStatus.IN_PREPARATION,
+  OrderStatus.READY_FOR_PICKUP,
+]);
+
+export function shouldShowOperationalItemsOnly(order, viewerEmail) {
+  if (!order?.status || !viewerEmail) return false;
+  const normalizedEmail = String(viewerEmail).trim().toLowerCase();
+  if (normalizedEmail !== OPERATIONAL_ITEMS_VIEWER_EMAIL) return false;
+  return OPERATIONAL_ITEMS_STATUSES.has(order.status);
+}
+
+export function mapOrderItemsForOperationalView(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((item) => item.isAvailable !== false)
+    .map((item) => ({
+      ...item,
+      quantity: item.confirmedQuantity != null ? item.confirmedQuantity : item.quantity,
+    }));
+}
+
+/** Ajusta items en GET /orders/:id para el admin de operaciones (solo lectura). */
+export function mapOrderForGetByIdResponse(order, viewerEmail) {
+  if (!shouldShowOperationalItemsOnly(order, viewerEmail)) {
+    return order;
+  }
+  return {
+    ...order,
+    items: mapOrderItemsForOperationalView(order.items),
+  };
+}
+
 /** Registra un cambio de estado en el historial del pedido (para timeline tipo Mercado Libre). */
 export async function recordStatusHistory(orderId, status) {
   await prisma.orderStatusHistory.create({
