@@ -7,6 +7,7 @@ import {
   BUSINESS_TIMEZONE,
   middayBusinessDayUtc,
 } from '../utils/businessTimezone.js';
+import { isAdminRole } from '../middleware/auth.js';
 
 const prisma = new PrismaClient();
 
@@ -171,11 +172,11 @@ export const getRequests = async (req, res) => {
     limit = Math.min(MAX_PAGE_SIZE, Math.max(1, limit));
     const skip = (page - 1) * limit;
 
-    if (userRole !== 'ADMIN' && userRole !== 'CLIENTE') {
+    if (!isAdminRole(userRole) && userRole !== 'CLIENTE') {
       return res.status(403).json({ error: 'No tiene permiso para acceder a esta sección.' });
     }
 
-    const baseWhere = userRole === 'ADMIN' ? {} : { userId };
+    const baseWhere = isAdminRole(userRole) ? {} : { userId };
 
     // Búsqueda por folio: no aplica filtro por status, busca en todos los estados (paginado por si acaso)
     if (searchTrimmed) {
@@ -285,7 +286,7 @@ export const getRequestById = async (req, res) => {
     }
 
     // Verificar permisos (solo el dueño o admin puede ver)
-    if (userRole !== 'ADMIN' && request.userId !== userId) {
+    if (!isAdminRole(userRole) && request.userId !== userId) {
       return res.status(403).json({
         error: 'No tienes permiso para ver esta solicitud'
       });

@@ -62,11 +62,28 @@ export const authenticate = async (req, res, next) => {
   }
 };
 
-// Middleware de autorización (solo admin)
+// Roles con privilegios administrativos. SUPER_ADMIN tiene los mismos permisos
+// que ADMIN (y más). Usar este helper en vez de comparar contra 'ADMIN' directo.
+export const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN'];
+
+/** true si el rol tiene privilegios de administrador (ADMIN o SUPER_ADMIN). */
+export const isAdminRole = (role) => ADMIN_ROLES.includes(role);
+
+// Middleware de autorización (admin y super admin)
 export const requireAdmin = (req, res, next) => {
-  if (req.userRole !== 'ADMIN') {
+  if (!isAdminRole(req.userRole)) {
     return res.status(403).json({
       error: 'Acceso denegado. Se requiere rol de administrador'
+    });
+  }
+  next();
+};
+
+// Middleware de autorización (solo super admin)
+export const requireSuperAdmin = (req, res, next) => {
+  if (req.userRole !== 'SUPER_ADMIN') {
+    return res.status(403).json({
+      error: 'Acceso denegado. Se requiere rol de super administrador'
     });
   }
   next();

@@ -4,6 +4,7 @@ import { createStatusChangeNotification } from './notificationsController.js';
 import * as orderService from '../services/orderService.js';
 import { OrderStatus } from '../constants/orderStatus.js';
 import { getBranchDeliveryTypes } from '../services/branchService.js';
+import { isAdminRole } from '../middleware/auth.js';
 
 /** Calendario de filtro por fecha: día completo en Ciudad de México → UTC en BD. */
 const MEXICO_TZ = 'America/Mexico_City';
@@ -135,7 +136,7 @@ export const createOrder = async (req, res) => {
 export const getOrderCounts = async (req, res) => {
   try {
     const userRole = req.userRole;
-    if (userRole !== 'ADMIN') {
+    if (!isAdminRole(userRole)) {
       return res.status(403).json({ error: 'Solo administradores pueden ver los conteos' });
     }
 
@@ -297,7 +298,7 @@ export const getOrderById = async (req, res) => {
     }
 
     // Verificar permisos (solo el dueño o admin puede ver)
-    if (userRole !== 'ADMIN' && order.userId !== userId) {
+    if (!isAdminRole(userRole) && order.userId !== userId) {
       return res.status(403).json({
         error: 'No tienes permiso para ver este pedido'
       });
@@ -527,7 +528,7 @@ export const cancelOrder = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.userId;
-    const isAdmin = req.userRole === 'ADMIN';
+    const isAdmin = isAdminRole(req.userRole);
     const reason = req.body?.reason != null ? String(req.body.reason).trim() : null;
     const order = await orderService.cancelOrder(id, userId, isAdmin, reason);
     res.json({
