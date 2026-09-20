@@ -213,10 +213,21 @@ export const getOrders = async (req, res) => {
   try {
     const userId = req.userId;
     const userRole = req.userRole;
-    const { status, page: pageStr, limit: limitStr, dateFrom, dateTo, dateField: dateFieldQuery } = req.query;
+    const { status, page: pageStr, limit: limitStr, dateFrom, dateTo, dateField: dateFieldQuery, branchId: branchIdQuery } = req.query;
 
     if (status && !VALID_ORDER_STATUSES.has(status)) {
       return res.status(400).json({ error: 'Estado de pedido no válido' });
+    }
+
+    // Filtro opcional por una sucursal específica. Solo aplica a admins: se
+    // valida el formato y más abajo se intersecta con las sucursales permitidas
+    // para no exponer datos fuera del alcance del usuario.
+    let requestedBranchId = null;
+    if (branchIdQuery != null && String(branchIdQuery).trim() !== '') {
+      requestedBranchId = parseInt(branchIdQuery, 10);
+      if (Number.isNaN(requestedBranchId)) {
+        return res.status(400).json({ error: 'El parámetro branchId debe ser un entero.' });
+      }
     }
 
     const DATE_FILTER_CREATED = 'createdAt';
@@ -269,6 +280,20 @@ export const getOrders = async (req, res) => {
         });
       }
       branchWhere = scope.where;
+
+      // Si el admin pide una sucursal específica, se intersecta con las
+      // permitidas: si no está dentro de su alcance, se devuelve vacío sin
+      // exponer datos de otras sucursales.
+      if (requestedBranchId != null) {
+        const allowedIds = scope.where?.branchId?.in;
+        if (allowedIds && !allowedIds.includes(requestedBranchId)) {
+          return res.json({
+            orders: [],
+            pagination: { page, limit, total: 0, totalPages: 1, hasNext: false, hasPrev: false },
+          });
+        }
+        branchWhere = { branchId: requestedBranchId };
+      }
     }
 
     const where = {
