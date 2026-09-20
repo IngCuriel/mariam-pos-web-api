@@ -25,14 +25,52 @@ const shapeUser = (u) => ({
   branches: (u.branches || []).map((b) => b.branch),
 });
 
-// GET /api/users  (solo super admin) — lista todos los usuarios
+// GET /api/users  (solo super admin) — lista paginada de usuarios.
+// Query params:
+//   page      (número de página, empieza en 1; por defecto 1)
+//   pageSize  (registros por página; por defecto 10, máximo 100)
+//   search    (busca por nombre o correo, opcional)
+//   role      (filtra por rol exacto, opcional)
+// Respuesta: { data: [...], pagination: { page, pageSize, total, totalPages } }
+// Orden: los últimos en registrarse primero (createdAt desc).
 export const getUsers = async (req, res) => {
   try {
-    const users = await prisma.user.findMany({
-      select: USER_SELECT,
-      orderBy: [{ role: 'asc' }, { name: 'asc' }],
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const rawPageSize = parseInt(req.query.pageSize, 10) || 10;
+    const pageSize = Math.min(100, Math.max(1, rawPageSize));
+
+    const search = (req.query.search || '').trim();
+    const role = (req.query.role || '').trim();
+
+    // Filtros dinámicos
+    const where = {};
+    if (VALID_ROLES.includes(role)) {
+      where.role = role;
+    }
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [total, users] = await prisma.$transaction([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        select: USER_SELECT,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+    res.json({
+      data: users.map(shapeUser),
+      pagination: { page, pageSize, total, totalPages },
     });
-    res.json(users.map(shapeUser));
   } catch (error) {
     console.error('Error obteniendo usuarios:', error);
     res.status(500).json({ error: 'Error al obtener usuarios' });
