@@ -203,6 +203,7 @@ model KitItem {
 enum UserRole {
   ADMIN
   CLIENTE
+  SUPER_ADMIN
 }
 
 enum RegistrationSource {
