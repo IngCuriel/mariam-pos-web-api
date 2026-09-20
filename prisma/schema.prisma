@@ -34,6 +34,7 @@ model Branch {
   inventories        Inventory[]
   orders             Order[]
   deliveryTypeLinks  BranchDeliveryType[]
+  assignedUsers      UserBranch[]
 
   @@index([name])
   @@index([isActive])
@@ -231,10 +232,25 @@ model User {
   cashExpressRequests CashExpressRequest[]
   balanceHistory      CashExpressBalanceHistory[]
   notifications       Notification[]
+  branches            UserBranch[]
 
   @@index([email])
   @@index([role])
   @@index([registrationSource])
+}
+
+// Sucursales asignadas a un usuario (admin/super admin). Muchos-a-muchos.
+model UserBranch {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branchId  Int
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, branchId])
+  @@index([userId])
+  @@index([branchId])
 }
 
 // Direcciones guardadas del usuario (catálogo tipo Mercado Libre)

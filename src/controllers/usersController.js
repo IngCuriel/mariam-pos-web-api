@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 
 const VALID_ROLES = ['CLIENTE', 'ADMIN', 'SUPER_ADMIN'];
 
-// Campos seguros del usuario (nunca exponer el password)
+// Campos seguros del usuario (nunca exponer el password) + sucursales asignadas
 const USER_SELECT = {
   id: true,
   name: true,
@@ -12,7 +12,18 @@ const USER_SELECT = {
   role: true,
   isActive: true,
   createdAt: true,
+  branches: {
+    select: {
+      branch: { select: { id: true, name: true } },
+    },
+  },
 };
+
+// Aplana la relación UserBranch a un array simple de sucursales
+const shapeUser = (u) => ({
+  ...u,
+  branches: (u.branches || []).map((b) => b.branch),
+});
 
 // GET /api/users  (solo super admin) — lista todos los usuarios
 export const getUsers = async (req, res) => {
@@ -21,7 +32,7 @@ export const getUsers = async (req, res) => {
       select: USER_SELECT,
       orderBy: [{ role: 'asc' }, { name: 'asc' }],
     });
-    res.json(users);
+    res.json(users.map(shapeUser));
   } catch (error) {
     console.error('Error obteniendo usuarios:', error);
     res.status(500).json({ error: 'Error al obtener usuarios' });
@@ -64,9 +75,66 @@ export const updateUserRole = async (req, res) => {
       select: USER_SELECT,
     });
 
-    res.json(updated);
+    res.json(shapeUser(updated));
   } catch (error) {
     console.error('Error actualizando rol:', error);
     res.status(500).json({ error: 'Error al actualizar el rol' });
+  }
+};
+
+// PATCH /api/users/:id/branches  (solo super admin) — asigna sucursales al usuario.
+// Recibe { branchIds: number[] } y sincroniza la asignación completa.
+export const updateUserBranches = async (req, res) => {
+  try {
+    const targetId = parseInt(req.params.id, 10);
+    const { branchIds } = req.body;
+
+    if (Number.isNaN(targetId)) {
+      return res.status(400).json({ error: 'ID de usuario inválido' });
+    }
+
+    if (!Array.isArray(branchIds)) {
+      return res.status(400).json({ error: 'branchIds debe ser un arreglo' });
+    }
+
+    const ids = [...new Set(branchIds.map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n)))];
+
+    const targetUser = await prisma.user.findUnique({ where: { id: targetId } });
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    // Solo admin/super admin pueden tener sucursales asignadas
+    if (targetUser.role !== 'ADMIN' && targetUser.role !== 'SUPER_ADMIN') {
+      return res.status(400).json({
+        error: 'Solo los usuarios Admin o Super Admin pueden tener sucursales asignadas',
+      });
+    }
+
+    // Validar que todas las sucursales existan
+    if (ids.length > 0) {
+      const existing = await prisma.branch.count({ where: { id: { in: ids } } });
+      if (existing !== ids.length) {
+        return res.status(400).json({ error: 'Una o más sucursales no existen' });
+      }
+    }
+
+    // Sincronizar: borrar todas las actuales y crear las nuevas, en una transacción
+    await prisma.$transaction([
+      prisma.userBranch.deleteMany({ where: { userId: targetId } }),
+      ...(ids.length > 0
+        ? [prisma.userBranch.createMany({ data: ids.map((branchId) => ({ userId: targetId, branchId })) })]
+        : []),
+    ]);
+
+    const updated = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: USER_SELECT,
+    });
+
+    res.json(shapeUser(updated));
+  } catch (error) {
+    console.error('Error actualizando sucursales:', error);
+    res.status(500).json({ error: 'Error al actualizar las sucursales' });
   }
 };
