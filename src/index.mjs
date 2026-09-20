@@ -82,6 +82,7 @@ import cloudinaryRouter from "./routes/cloudinary.js";
 import notificationsRouter from "./routes/notifications.js";
 import addressesRouter from "./routes/addresses.js";
 import usersRouter from "./routes/users.js";
+import cashierTransactionsRouter from "./routes/cashierTransactions.js";
 
 app.use("/api/sales", salesRouter);
 app.use("/api/products", productsRouter);
@@ -92,6 +93,7 @@ app.use("/api/cloudinary", cloudinaryRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/addresses", addressesRouter);
 app.use("/api/users", usersRouter);
+app.use("/api/cashier-transactions", cashierTransactionsRouter);
 
 // -------------------
 // Iniciar servidor

@@ -20,21 +20,22 @@ datasource db {
 model Branch {
   id          Int      @id @default(autoincrement())
   name        String   @unique
-  description String?  // Dirección o texto descriptivo (ej. para "solo tienda")
-  logo        String?  // URL del logo de la sucursal
+  description String? // Dirección o texto descriptivo (ej. para "solo tienda")
+  logo        String? // URL del logo de la sucursal
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relaciones
-  sales              Sale[]
-  products           Product[]
-  categories         Category[]
-  presentations      ProductPresentation[]
-  inventories        Inventory[]
-  orders             Order[]
-  deliveryTypeLinks  BranchDeliveryType[]
-  assignedUsers      UserBranch[]
+  sales               Sale[]
+  products            Product[]
+  categories          Category[]
+  presentations       ProductPresentation[]
+  inventories         Inventory[]
+  orders              Order[]
+  deliveryTypeLinks   BranchDeliveryType[]
+  assignedUsers       UserBranch[]
+  cashierTransactions CashierTransaction[]
 
   @@index([name])
   @@index([isActive])
@@ -80,7 +81,7 @@ model Category {
   description String?
   showInPOS   Boolean  @default(false)
   showInStore Boolean  @default(false) // Mostrar en tienda en línea (por defecto oculto)
-  image       String?  // URL de la imagen de la categoría
+  image       String? // URL de la imagen de la categoría
   branchId    Int?
   branch      Branch?  @relation(fields: [branchId], references: [id])
   createdAt   DateTime @default(now())
@@ -94,24 +95,24 @@ model Category {
 }
 
 model Product {
-  id             Int      @id @default(autoincrement())
-  code           String?
-  name           String
-  status         Int?
-  saleType            String?   // Tipo de venta comercial (ej. menudeo, mayoreo)
-  productAvailability String?   // Disponibilidad: online_pickup | local_delivery | in_store_only (tienda en línea)
-  price          Float
-  cost           Float?
-  description    String?
-  features       Json?    // Lista de características para la tienda online (array de strings)
-  icon           String?
-  trackInventory Boolean? @default(false)
-  isKit          Boolean  @default(false)
-  showInStore    Boolean  @default(true) // Mostrar en tienda en línea (por defecto visible)
-  branchId       Int?
-  branch         Branch?  @relation(fields: [branchId], references: [id])
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @default(now()) @updatedAt
+  id                  Int      @id @default(autoincrement())
+  code                String?
+  name                String
+  status              Int?
+  saleType            String? // Tipo de venta comercial (ej. menudeo, mayoreo)
+  productAvailability String? // Disponibilidad: online_pickup | local_delivery | in_store_only (tienda en línea)
+  price               Float
+  cost                Float?
+  description         String?
+  features            Json? // Lista de características para la tienda online (array de strings)
+  icon                String?
+  trackInventory      Boolean? @default(false)
+  isKit               Boolean  @default(false)
+  showInStore         Boolean  @default(true) // Mostrar en tienda en línea (por defecto visible)
+  branchId            Int?
+  branch              Branch?  @relation(fields: [branchId], references: [id])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @default(now()) @updatedAt
 
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id])
@@ -131,12 +132,12 @@ model Product {
 }
 
 model ProductImage {
-  id        Int      @id @default(autoincrement())
-  url       String   // URL de la imagen en Cloudinary
-  displayOrder Int   @default(0) // Orden de visualización
-  productId Int
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  url          String // URL de la imagen en Cloudinary
+  displayOrder Int      @default(0) // Orden de visualización
+  productId    Int
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
 
   @@index([productId])
   @@index([displayOrder])
@@ -213,18 +214,18 @@ enum RegistrationSource {
 }
 
 model User {
-  id                 Int                @id @default(autoincrement())
-  email              String              @unique
-  name               String
-  phone              String?
-  password           String // Hash de la contraseña
-  role               UserRole            @default(CLIENTE)
-  registrationSource RegistrationSource? // Origen del registro: WEB o APP
-  isActive           Boolean             @default(true)
+  id                   Int                 @id @default(autoincrement())
+  email                String              @unique
+  name                 String
+  phone                String?
+  password             String // Hash de la contraseña
+  role                 UserRole            @default(CLIENTE)
+  registrationSource   RegistrationSource? // Origen del registro: WEB o APP
+  isActive             Boolean             @default(true)
   passwordResetToken   String?
   passwordResetExpires DateTime?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
   // Relaciones
   orders              Order[]
@@ -233,6 +234,7 @@ model User {
   balanceHistory      CashExpressBalanceHistory[]
   notifications       Notification[]
   branches            UserBranch[]
+  cashierTransactions CashierTransaction[]
 
   @@index([email])
   @@index([role])
@@ -255,21 +257,21 @@ model UserBranch {
 
 // Direcciones guardadas del usuario (catálogo tipo Mercado Libre)
 model UserAddress {
-  id          Int      @id @default(autoincrement())
-  userId      Int
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  label       String   // Ej. "Casa", "Oficina"
-  street      String
-  colony      String
-  postalCode  String
-  city        String
-  state       String?
-  references  String?
-  latitude    Float?   // Ubicación en mapa (para que el admin identifique al cliente)
-  longitude   Float?
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String // Ej. "Casa", "Oficina"
+  street     String
+  colony     String
+  postalCode String
+  city       String
+  state      String?
+  references String?
+  latitude   Float? // Ubicación en mapa (para que el admin identifique al cliente)
+  longitude  Float?
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([userId])
 }
@@ -279,22 +281,22 @@ model UserAddress {
 // ============================================================
 
 enum OrderStatus {
-  CREATED              // Recién creado (opcional)
-  UNDER_REVIEW         // Admin revisando disponibilidad
-  PARTIALLY_AVAILABLE  // Revisado, falta al menos un producto
-  AVAILABLE            // Todo disponible
-  IN_PREPARATION       // Cliente aceptó; en preparación
-  READY_FOR_PICKUP     // Listo para recoger en sucursal
-  IN_TRANSIT           // En camino (envío a domicilio)
-  COMPLETED            // Entregado/recogido
-  CANCELLED            // Cancelado
+  CREATED // Recién creado (opcional)
+  UNDER_REVIEW // Admin revisando disponibilidad
+  PARTIALLY_AVAILABLE // Revisado, falta al menos un producto
+  AVAILABLE // Todo disponible
+  IN_PREPARATION // Cliente aceptó; en preparación
+  READY_FOR_PICKUP // Listo para recoger en sucursal
+  IN_TRANSIT // En camino (envío a domicilio)
+  COMPLETED // Entregado/recogido
+  CANCELLED // Cancelado
 }
 
 // Tipos de entrega configurables (recoger en sucursal, envío a domicilio, etc.)
 model DeliveryType {
   id           Int     @id @default(autoincrement())
-  code         String  @unique  // pickup | delivery
-  name         String  // "Recoger en sucursal" | "Envío a domicilio"
+  code         String  @unique // pickup | delivery
+  name         String // "Recoger en sucursal" | "Envío a domicilio"
   cost         Float   @default(0)
   isActive     Boolean @default(true)
   displayOrder Int     @default(0)
@@ -309,11 +311,11 @@ model DeliveryType {
 model BranchDeliveryType {
   branchId       Int
   deliveryTypeId Int
-  isActive       Boolean @default(true)  // La sucursal puede activar/desactivar este tipo
-  costOverride   Float?                  // Si no null, usa este costo en lugar del del DeliveryType
-  displayOrder   Int     @default(0)     // Orden de visualización en esta sucursal
-  branch        Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  deliveryType  DeliveryType @relation(fields: [deliveryTypeId], references: [id], onDelete: Cascade)
+  isActive       Boolean      @default(true) // La sucursal puede activar/desactivar este tipo
+  costOverride   Float? // Si no null, usa este costo en lugar del del DeliveryType
+  displayOrder   Int          @default(0) // Orden de visualización en esta sucursal
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  deliveryType   DeliveryType @relation(fields: [deliveryTypeId], references: [id], onDelete: Cascade)
 
   @@id([branchId, deliveryTypeId])
   @@index([branchId])
@@ -321,11 +323,11 @@ model BranchDeliveryType {
 }
 
 model OrderStatusHistory {
-  id        Int        @id @default(autoincrement())
+  id        Int         @id @default(autoincrement())
   orderId   Int
-  order     Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   status    OrderStatus
-  createdAt DateTime   @default(now())
+  createdAt DateTime    @default(now())
 
   @@index([orderId])
   @@index([orderId, createdAt])
@@ -337,21 +339,21 @@ model Order {
   total              Float
   status             OrderStatus   @default(UNDER_REVIEW)
   notes              String?
-  orderAvailability  String?       // Origen del pedido: local_delivery | online_pickup (productAvailability del grupo)
+  orderAvailability  String? // Origen del pedido: local_delivery | online_pickup (productAvailability del grupo)
   userId             Int
   user               User          @relation(fields: [userId], references: [id])
   branchId           Int?
   branch             Branch?       @relation(fields: [branchId], references: [id])
   deliveryTypeId     Int?
   deliveryType       DeliveryType? @relation(fields: [deliveryTypeId], references: [id])
-  deliveryCost       Float?        @default(0)  // Costo de envío al momento del pedido
-  deliveryAddress    String?       // Dirección de envío (cuando el cliente confirma pedido con envío a domicilio)
-  confirmedAt        DateTime?     // Cuando el cliente acepta pedido actualizado
-  readyAt            DateTime?     // Cuando admin marca "listo para recoger" o "en camino"
-  deliveredAt        DateTime?     // Cuando admin marca "entregado"
-  cancellationReason String?     // Motivo de cancelación (por tienda o por cliente)
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  deliveryCost       Float?        @default(0) // Costo de envío al momento del pedido
+  deliveryAddress    String? // Dirección de envío (cuando el cliente confirma pedido con envío a domicilio)
+  confirmedAt        DateTime? // Cuando el cliente acepta pedido actualizado
+  readyAt            DateTime? // Cuando admin marca "listo para recoger" o "en camino"
+  deliveredAt        DateTime? // Cuando admin marca "entregado"
+  cancellationReason String? // Motivo de cancelación (por tienda o por cliente)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   items         OrderItem[]
   statusHistory OrderStatusHistory[]
@@ -365,17 +367,17 @@ model Order {
 model OrderItem {
   id                   Int      @id @default(autoincrement())
   orderId              Int
-  order                Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order                Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId            Int
   productName          String
-  quantity             Int       // Cantidad solicitada (unidades de esta presentación)
-  confirmedQuantity    Int?      // Cantidad confirmada por admin (<= quantity)
+  quantity             Int // Cantidad solicitada (unidades de esta presentación)
+  confirmedQuantity    Int? // Cantidad confirmada por admin (<= quantity)
   unitPrice            Float
-  subtotal             Float    // Subtotal según cantidad solicitada (se recalcula al confirmar)
-  isAvailable           Boolean?  // null = no revisado, true = disponible, false = no disponible
-  presentationName     String?   // Nombre de la presentación elegida (ej. "Caja 6 pz")
-  presentationQuantity Int?      // Piezas de esa presentación (ej. 6)
-  createdAt            DateTime  @default(now())
+  subtotal             Float // Subtotal según cantidad solicitada (se recalcula al confirmar)
+  isAvailable          Boolean? // null = no revisado, true = disponible, false = no disponible
+  presentationName     String? // Nombre de la presentación elegida (ej. "Caja 6 pz")
+  presentationQuantity Int? // Piezas de esa presentación (ej. 6)
+  createdAt            DateTime @default(now())
 
   @@index([orderId])
 }
@@ -422,7 +424,7 @@ model CashExpressConfig {
   // Relación con historial de abonos
   balanceHistory CashExpressBalanceHistory[]
   // Relación con cuentas bancarias
-  bankAccounts CashExpressBankAccount[]
+  bankAccounts   CashExpressBankAccount[]
 
   @@map("cash_express_config")
 }
@@ -450,21 +452,21 @@ model CashExpressBalanceHistory {
 }
 
 model CashExpressBankAccount {
-  id                   Int     @id @default(autoincrement())
+  id              Int     @id @default(autoincrement())
   // Nombre del beneficiario
-  beneficiaryName      String
+  beneficiaryName String
   // Número de cuenta
-  accountNumber        String
+  accountNumber   String
   // CLABE (opcional)
-  clabe                String?
+  clabe           String?
   // Concepto o referencia para el depósito
-  concept              String?
+  concept         String?
   // Banco o institución financiera
-  bankName             String?
+  bankName        String?
   // Orden de visualización
-  displayOrder         Int     @default(0)
+  displayOrder    Int     @default(0)
   // Si está activa
-  isActive             Boolean @default(true)
+  isActive        Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -494,16 +496,16 @@ model CashExpressRequest {
   recipientPhone String?
   relationship   String?
 
-  status             CashExpressStatus @default(PENDIENTE)
-  rejectionReason    String? // Motivo de rechazo si fue rebotada
-  depositReceipt     String? // URL o base64 del comprobante de depósito
-  depositDeadline    DateTime? // Fecha límite para subir comprobante (createdAt + 48 h)
-  receiptSentAt      DateTime? // Fecha de envío del comprobante a revisión
-  depositValidatedAt DateTime? // Fecha de validación del depósito
+  status                CashExpressStatus @default(PENDIENTE)
+  rejectionReason       String? // Motivo de rechazo si fue rebotada
+  depositReceipt        String? // URL o base64 del comprobante de depósito
+  depositDeadline       DateTime? // Fecha límite para subir comprobante (createdAt + 48 h)
+  receiptSentAt         DateTime? // Fecha de envío del comprobante a revisión
+  depositValidatedAt    DateTime? // Fecha de validación del depósito
   estimatedDeliveryDate DateTime? // Fecha estimada de entrega calculada al crear la solicitud
-  availableFrom      DateTime? // Fecha/hora desde la cual está disponible para recoger
-  deliveredAt        DateTime?
-  signedReceipt      String? // URL del comprobante firmado por el cliente
+  availableFrom         DateTime? // Fecha/hora desde la cual está disponible para recoger
+  deliveredAt           DateTime?
+  signedReceipt         String? // URL del comprobante firmado por el cliente
 
   userId Int
   user   User @relation(fields: [userId], references: [id])
@@ -524,35 +526,35 @@ model CashExpressRequest {
 // ============================================================
 
 model Notification {
-  id          Int       @id @default(autoincrement())
-  userId      Int
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Tipo de notificación
-  type        String    // 'cash_express' o 'order'
-  entityId    Int       // ID de la solicitud o pedido
-  
+  type     String // 'cash_express' o 'order'
+  entityId Int // ID de la solicitud o pedido
+
   // Información de la notificación
-  title       String
-  message     String
-  action      String?   // Descripción de qué hacer
-  
+  title   String
+  message String
+  action  String? // Descripción de qué hacer
+
   // Estado
-  status      String    // Estado actual (PENDIENTE, CONFIRMADO, etc.)
+  status         String // Estado actual (PENDIENTE, CONFIRMADO, etc.)
   previousStatus String? // Estado anterior
-  
+
   // Leído
-  read        Boolean   @default(false)
-  readAt      DateTime?
-  
+  read   Boolean   @default(false)
+  readAt DateTime?
+
   // Ocultar (el usuario la oculta pero no se elimina de la BD)
-  hiddenAt    DateTime?
-  
+  hiddenAt DateTime?
+
   // Expiración (solo informativa; ya no se usa para eliminar)
-  expiresAt   DateTime  // Fecha de expiración (1 día si leída, 5 días si no)
-  
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  expiresAt DateTime // Fecha de expiración (1 día si leída, 5 días si no)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([read])
@@ -560,4 +562,34 @@ model Notification {
   @@index([expiresAt])
   @@index([type, entityId])
   @@index([createdAt])
+}
+
+// ============================================================
+// 🧾 MÓDULO DE TRANSACCIONES DE CAJERO
+// ============================================================
+
+enum CashierTransactionType {
+  RECARGA
+  PAGO_SERVICIO
+  PIN_ELECTRONICO
+}
+
+model CashierTransaction {
+  id           Int                    @id @default(autoincrement())
+  type         CashierTransactionType
+  amount       Float // Monto de la operación (> 0)
+  branchId     Int // Sucursal asociada (obligatoria)
+  branch       Branch                 @relation(fields: [branchId], references: [id])
+  cashierName  String // Nombre del cajero que realizó la operación
+  notes        String? // Notas opcionales
+  registeredAt DateTime               @default(now()) // Fecha/hora del movimiento (editable)
+  userId       Int? // Usuario admin que capturó el registro (auditoría)
+  user         User?                  @relation(fields: [userId], references: [id])
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  @@index([branchId])
+  @@index([type])
+  @@index([registeredAt])
+  @@index([userId])
 }
