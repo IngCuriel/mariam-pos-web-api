@@ -1,8 +1,24 @@
 import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
 const VALID_ROLES = ['CLIENTE', 'ADMIN', 'SUPER_ADMIN'];
+
+// Vigencia del enlace de reinicio de contraseña (1 hora, igual que forgot-password).
+const PASSWORD_RESET_EXPIRY_MS = 60 * 60 * 1000;
+
+// SHA-256 del token: en la BD nunca se guarda el token en claro.
+function hashResetToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+// Base URL de la tienda donde vive el formulario /reset-password.
+function getStoreClientBaseUrl() {
+  const url = process.env.STORE_CLIENT_URL?.trim();
+  if (url) return url.replace(/\/$/, '');
+  return 'http://localhost:5173';
+}
 
 // Campos seguros del usuario (nunca exponer el password) + sucursales asignadas
 const USER_SELECT = {
@@ -174,5 +190,58 @@ export const updateUserBranches = async (req, res) => {
   } catch (error) {
     console.error('Error actualizando sucursales:', error);
     res.status(500).json({ error: 'Error al actualizar las sucursales' });
+  }
+};
+
+// POST /api/users/:id/reset-link  (solo super admin)
+// Genera un enlace de reinicio de contraseña para el usuario indicado y lo
+// DEVUELVE en la respuesta (no se envía por correo). El super admin lo comparte
+// manualmente con el titular de la cuenta.
+//
+// El enlace apunta al formulario /reset-password de la tienda y usa el mismo
+// mecanismo de token que "forgot-password": se guarda solo el hash, con vigencia
+// de 1 hora. Generar un enlace nuevo invalida el anterior.
+export const generateResetLink = async (req, res) => {
+  try {
+    const targetId = parseInt(req.params.id, 10);
+    if (Number.isNaN(targetId)) {
+      return res.status(400).json({ error: 'ID de usuario inválido' });
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, name: true, email: true, isActive: true },
+    });
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    if (!targetUser.isActive) {
+      return res.status(400).json({ error: 'La cuenta está desactivada' });
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashResetToken(rawToken);
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_EXPIRY_MS);
+
+    await prisma.user.update({
+      where: { id: targetId },
+      data: {
+        passwordResetToken: tokenHash,
+        passwordResetExpires: expiresAt,
+      },
+    });
+
+    const resetUrl = `${getStoreClientBaseUrl()}/reset-password?token=${rawToken}`;
+
+    res.json({
+      resetUrl,
+      expiresAt,
+      user: { id: targetUser.id, name: targetUser.name, email: targetUser.email },
+    });
+  } catch (error) {
+    console.error('Error generando enlace de reinicio:', error);
+    res.status(500).json({ error: 'No se pudo generar el enlace de reinicio' });
   }
 };
