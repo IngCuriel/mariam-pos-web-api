@@ -5,6 +5,33 @@ import * as orderService from '../services/orderService.js';
 import { OrderStatus } from '../constants/orderStatus.js';
 import { getBranchDeliveryTypes } from '../services/branchService.js';
 import { isAdminRole } from '../middleware/auth.js';
+import { resolveAllowedBranches } from '../utils/userBranches.js';
+
+/**
+ * Construye el fragmento de `where` para restringir pedidos por sucursal según
+ * las reglas de acceso del usuario. Devuelve:
+ *   - { deny: true } → el usuario no puede ver ningún pedido (admin sin sucursales).
+ *   - { where: {} }  → sin restricción (super admin).
+ *   - { where: { branchId: { in: [...] } } } → solo sus sucursales (admin).
+ */
+async function branchScopeForOrders(userId, userRole) {
+  const allowed = await resolveAllowedBranches(userId, userRole);
+  if (allowed.unrestricted) return { deny: false, where: {} };
+  if (allowed.branchIds.length === 0) return { deny: true, where: {} };
+  return { deny: false, where: { branchId: { in: allowed.branchIds } } };
+}
+
+/**
+ * Verifica si un usuario admin puede operar sobre un pedido de una sucursal dada.
+ * El super admin puede con todas. El admin, solo con las suyas.
+ * @returns {Promise<boolean>}
+ */
+async function adminCanAccessBranch(userId, userRole, branchId) {
+  const allowed = await resolveAllowedBranches(userId, userRole);
+  if (allowed.unrestricted) return true;
+  if (branchId == null) return false;
+  return allowed.branchIds.includes(branchId);
+}
 
 /** Calendario de filtro por fecha: día completo en Ciudad de México → UTC en BD. */
 const MEXICO_TZ = 'America/Mexico_City';
@@ -140,10 +167,19 @@ export const getOrderCounts = async (req, res) => {
       return res.status(403).json({ error: 'Solo administradores pueden ver los conteos' });
     }
 
+    // Restringir los conteos a las sucursales del usuario.
+    const scope = await branchScopeForOrders(req.userId, userRole);
+    if (scope.deny) {
+      const empty = {};
+      let t = 0;
+      for (const s of Object.values(OrderStatus)) empty[s] = 0;
+      return res.json({ counts: empty, total: t });
+    }
+
     const counts = await prisma.order.groupBy({
       by: ['status'],
       _count: { id: true },
-      where: {},
+      where: scope.where,
     });
 
     const countByStatus = counts.reduce((acc, row) => {
@@ -221,8 +257,23 @@ export const getOrders = async (req, res) => {
     limit = Math.min(maxLimit, Math.max(1, limit));
     const skip = (page - 1) * limit;
 
+    // Los admin solo ven pedidos de sus sucursales (el super admin, todas).
+    // Los clientes no aplican este filtro (ven sus propios pedidos por userId).
+    let branchWhere = {};
+    if (userRole !== 'CLIENTE') {
+      const scope = await branchScopeForOrders(userId, userRole);
+      if (scope.deny) {
+        return res.json({
+          orders: [],
+          pagination: { page, limit, total: 0, totalPages: 1, hasNext: false, hasPrev: false },
+        });
+      }
+      branchWhere = scope.where;
+    }
+
     const where = {
       ...(userRole === 'CLIENTE' ? { userId } : {}),
+      ...branchWhere,
       ...(status ? { status } : {}),
       ...(rangeBounds
         ? dateField === DATE_FILTER_DELIVERED
@@ -304,6 +355,18 @@ export const getOrderById = async (req, res) => {
       });
     }
 
+    // Un admin solo puede ver pedidos de sus sucursales (el super admin, todas).
+    if (isAdminRole(userRole)) {
+      const scope = await branchScopeForOrders(userId, userRole);
+      if (scope.deny) {
+        return res.status(403).json({ error: 'No tienes acceso a este pedido' });
+      }
+      const allowedIds = scope.where?.branchId?.in;
+      if (allowedIds && (order.branchId == null || !allowedIds.includes(order.branchId))) {
+        return res.status(403).json({ error: 'No tienes acceso a este pedido' });
+      }
+    }
+
     const responseOrder = orderService.mapOrderForGetByIdResponse(order, req.user?.email);
     res.json(responseOrder);
   } catch (error) {
@@ -330,13 +393,18 @@ export const updateOrderStatus = async (req, res) => {
 
     const currentOrder = await prisma.order.findUnique({
       where: { id: parseInt(id) },
-      select: { status: true, userId: true }
+      select: { status: true, userId: true, branchId: true }
     });
 
     if (!currentOrder) {
       return res.status(404).json({
         error: 'Pedido no encontrado'
       });
+    }
+
+    // El admin solo puede operar sobre pedidos de sus sucursales.
+    if (!(await adminCanAccessBranch(req.userId, req.userRole, currentOrder.branchId))) {
+      return res.status(403).json({ error: 'No tienes acceso a este pedido' });
     }
 
     const data = { status };
@@ -408,6 +476,11 @@ export const updateOrderItemsAvailability = async (req, res) => {
       });
     }
 
+    // El admin solo puede operar sobre pedidos de sus sucursales.
+    if (!(await adminCanAccessBranch(req.userId, req.userRole, order.branchId))) {
+      return res.status(403).json({ error: 'No tienes acceso a este pedido' });
+    }
+
     if (order.status !== OrderStatus.UNDER_REVIEW) {
       return res.status(400).json({
         error: 'Solo se puede actualizar la disponibilidad cuando el pedido está en revisión'
@@ -468,6 +541,19 @@ export const confirmOrderAvailability = async (req, res) => {
   try {
     const { id } = req.params;
     const { items } = req.body;
+
+    // El admin solo puede operar sobre pedidos de sus sucursales.
+    const target = await prisma.order.findUnique({
+      where: { id: parseInt(id) },
+      select: { branchId: true },
+    });
+    if (!target) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    if (!(await adminCanAccessBranch(req.userId, req.userRole, target.branchId))) {
+      return res.status(403).json({ error: 'No tienes acceso a este pedido' });
+    }
+
     const order = await orderService.reviewAvailability(id, items);
     res.json({
       message: 'Disponibilidad confirmada. El cliente ha sido notificado.',
@@ -510,6 +596,19 @@ export const markOrderReady = async (req, res) => {
   try {
     const { id } = req.params;
     const { readyAt } = req.body || {};
+
+    // El admin solo puede operar sobre pedidos de sus sucursales.
+    const target = await prisma.order.findUnique({
+      where: { id: parseInt(id) },
+      select: { branchId: true },
+    });
+    if (!target) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    if (!(await adminCanAccessBranch(req.userId, req.userRole, target.branchId))) {
+      return res.status(403).json({ error: 'No tienes acceso a este pedido' });
+    }
+
     const order = await orderService.markAsReady(id, readyAt);
     res.json({
       message: 'Pedido marcado como listo para recoger.',
