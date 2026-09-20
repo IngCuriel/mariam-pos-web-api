@@ -5,6 +5,40 @@ import {
   filterRowsByBusinessDateRange,
   sqlUtcTimestampToBusinessDate,
 } from '../utils/businessTimezone.js';
+import { resolveAllowedBranches } from '../utils/userBranches.js';
+
+/**
+ * Calcula el filtro final de branchId combinando:
+ *  - la sucursal pedida por el usuario (requestedBranchId, puede ser null)
+ *  - las sucursales que el usuario tiene permitido ver (según su rol)
+ *
+ * @returns {{ deny: boolean, branchIdFilter: number | { in: number[] } | undefined }}
+ *   deny=true → el usuario no puede ver nada (responder []).
+ *   branchIdFilter → valor listo para asignar a where.branchId (o undefined = sin filtro).
+ */
+function computeBranchFilter(allowed, requestedBranchId) {
+  // Super admin: sin restricción; respeta solo lo que pidió (si pidió algo).
+  if (allowed.unrestricted) {
+    return { deny: false, branchIdFilter: requestedBranchId || undefined };
+  }
+
+  // Admin sin sucursales asignadas (o rol sin acceso): no ve nada.
+  if (allowed.branchIds.length === 0) {
+    return { deny: true, branchIdFilter: undefined };
+  }
+
+  // Pidió una sucursal específica: solo se permite si está entre las asignadas.
+  if (requestedBranchId) {
+    if (allowed.branchIds.includes(requestedBranchId)) {
+      return { deny: false, branchIdFilter: requestedBranchId };
+    }
+    // Pidió una sucursal que no le corresponde → no ve nada.
+    return { deny: true, branchIdFilter: undefined };
+  }
+
+  // No pidió sucursal: se restringe al conjunto de las asignadas.
+  return { deny: false, branchIdFilter: { in: allowed.branchIds } };
+}
 
 const prisma = new PrismaClient();
 
@@ -43,6 +77,9 @@ export const getSales = async (req, res) => {
   try {
     const { startDate, endDate, branch, paymentMethod } = req.query;
 
+    // Seguridad: restringir a las sucursales que el usuario tiene permitido ver.
+    const allowed = await resolveAllowedBranches(req.userId, req.userRole);
+
     let sales;
     if (startDate || endDate) {
       const fromOk = isValidYyyyMmDd(startDate) ? startDate.trim() : null;
@@ -61,7 +98,9 @@ export const getSales = async (req, res) => {
       const rangeFrom = fromOk || toOk;
       const rangeTo = toOk || fromOk;
 
-      const branchId = await resolveBranchIdByName(branch);
+      const requestedBranchId = await resolveBranchIdByName(branch);
+      const { deny, branchIdFilter } = computeBranchFilter(allowed, requestedBranchId);
+      if (deny) return res.json([]);
 
       let padded;
       try {
@@ -78,7 +117,7 @@ export const getSales = async (req, res) => {
           lte: padded.lte,
         },
       };
-      if (branchId) where.branchId = branchId;
+      if (branchIdFilter !== undefined) where.branchId = branchIdFilter;
       if (paymentMethod) where.paymentMethod = paymentMethod;
 
       const maxFetch = 15000;
@@ -98,17 +137,17 @@ export const getSales = async (req, res) => {
     } else {
       // Sin filtros de fecha, usar Prisma normal
       const where = {};
+      let requestedBranchId = null;
       if (branch) {
-        const branchObj = await prisma.branch.findUnique({
-          where: { name: branch }
-        });
-        if (branchObj) {
-          where.branchId = branchObj.id;
-        } else {
+        requestedBranchId = await resolveBranchIdByName(branch);
+        if (!requestedBranchId) {
           // Si no existe la sucursal, no retornar ventas
           return res.json([]);
         }
       }
+      const { deny, branchIdFilter } = computeBranchFilter(allowed, requestedBranchId);
+      if (deny) return res.json([]);
+      if (branchIdFilter !== undefined) where.branchId = branchIdFilter;
       if (paymentMethod) where.paymentMethod = paymentMethod;
       
       const rows = await prisma.sale.findMany({
@@ -251,6 +290,18 @@ export const getSalesStats = async (req, res) => {
 
     const dateExpr = sqlUtcTimestampToBusinessDate('s');
 
+    const emptyStats = {
+      totalSales: 0,
+      totalAmount: 0,
+      averageSale: 0,
+      byBranch: [],
+      byPaymentMethod: [],
+      byDay: [],
+    };
+
+    // Seguridad: restringir a las sucursales que el usuario tiene permitido ver.
+    const allowed = await resolveAllowedBranches(req.userId, req.userRole);
+
     let whereConditions = [];
 
     if (startDate) {
@@ -266,22 +317,31 @@ export const getSalesStats = async (req, res) => {
       }
       whereConditions.push(`${dateExpr} <= '${endDate.trim()}'::date`);
     }
-    
+
+    let requestedBranchId = null;
     if (branch) {
       const branchObj = await prisma.branch.findUnique({
         where: { name: branch }
       });
-      if (branchObj) {
-        whereConditions.push(`s."branchId" = ${branchObj.id}`);
-      } else {
+      if (!branchObj) {
         // Si no existe la sucursal, retornar estadísticas vacías
-        return res.json({
-          totalSales: 0,
-          totalAmount: 0,
-          byBranch: [],
-          byPaymentMethod: [],
-          byDay: []
-        });
+        return res.json(emptyStats);
+      }
+      requestedBranchId = branchObj.id;
+    }
+
+    // Combinar la sucursal pedida con las sucursales permitidas del usuario.
+    const { deny, branchIdFilter } = computeBranchFilter(allowed, requestedBranchId);
+    if (deny) return res.json(emptyStats);
+
+    if (branchIdFilter !== undefined) {
+      if (typeof branchIdFilter === 'object' && Array.isArray(branchIdFilter.in)) {
+        const ids = branchIdFilter.in.map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n));
+        // No debería quedar vacío (deny lo cubre), pero por seguridad:
+        if (ids.length === 0) return res.json(emptyStats);
+        whereConditions.push(`s."branchId" IN (${ids.join(', ')})`);
+      } else {
+        whereConditions.push(`s."branchId" = ${parseInt(branchIdFilter, 10)}`);
       }
     }
     
@@ -387,10 +447,16 @@ export const getBranchStats = async (req, res) => {
     if (!branchObj) {
       return res.status(404).json({ error: 'Sucursal no encontrada' });
     }
-    
+
+    // Seguridad: el usuario solo puede consultar sucursales que tiene permitido ver.
+    const allowed = await resolveAllowedBranches(req.userId, req.userRole);
+    if (!allowed.unrestricted && !allowed.branchIds.includes(branchObj.id)) {
+      return res.status(403).json({ error: 'No tienes acceso a esta sucursal' });
+    }
+
     const dateExpr = sqlUtcTimestampToBusinessDate('s');
 
-    let whereConditions = [`s."branchId" = ${branchObj.id}`];
+    let whereConditions = [`s."branchId" = ${parseInt(branchObj.id, 10)}`];
 
     if (startDate) {
       if (!isValidYyyyMmDd(startDate)) {

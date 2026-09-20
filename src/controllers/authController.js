@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { sendPasswordResetEmail } from '../services/emailService.js';
+import { USER_BRANCHES_SELECT, flattenUserBranches } from '../utils/userBranches.js';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -120,9 +121,10 @@ export const login = async (req, res) => {
       });
     }
 
-    // Buscar usuario
+    // Buscar usuario (incluye las sucursales asignadas para el panel admin)
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() }
+      where: { email: email.toLowerCase() },
+      include: USER_BRANCHES_SELECT,
     });
 
     if (!user) {
@@ -157,7 +159,8 @@ export const login = async (req, res) => {
         name: user.name,
         phone: user.phone,
         role: user.role,
-        registrationSource: user.registrationSource
+        registrationSource: user.registrationSource,
+        branches: flattenUserBranches(user),
       },
       token
     });
@@ -183,7 +186,7 @@ export const verifyToken = async (req, res) => {
     // Verificar token
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    // Obtener usuario actualizado
+    // Obtener usuario actualizado (con sucursales asignadas)
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: {
@@ -194,7 +197,8 @@ export const verifyToken = async (req, res) => {
         role: true,
         registrationSource: true,
         isActive: true,
-        createdAt: true
+        createdAt: true,
+        ...USER_BRANCHES_SELECT,
       }
     });
 
@@ -205,7 +209,7 @@ export const verifyToken = async (req, res) => {
     }
 
     res.json({
-      user,
+      user: { ...user, branches: flattenUserBranches(user) },
       valid: true
     });
   } catch (error) {
