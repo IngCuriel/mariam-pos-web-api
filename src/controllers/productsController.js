@@ -950,14 +950,27 @@ export const updateCategory = async (req, res) => {
 // Obtener solo categorías visibles para configuración (solo admin)
 export const getCategoriesForConfig = async (req, res) => {
   try {
-    // Obtener todas las categorías visibles con su imagen
+    // Seguridad: el ADMIN solo ve las categorías de sus sucursales; el SUPER_ADMIN, todas.
+    const allowed = await resolveAllowedBranches(req.userId, req.userRole);
+
+    const where = { showInStore: true };
+    if (!allowed.unrestricted) {
+      // Admin sin sucursales asignadas → no ve ninguna categoría.
+      if (allowed.branchIds.length === 0) {
+        return res.json({ categories: [] });
+      }
+      where.branchId = { in: allowed.branchIds };
+    }
+
+    // Obtener las categorías visibles con su imagen
     const visibleCategories = await prisma.category.findMany({
-      where: { showInStore: true },
+      where,
       select: {
         id: true,
         name: true,
         image: true,
-        description: true
+        description: true,
+        branchId: true
       },
       orderBy: { name: 'asc' }
     });
@@ -986,12 +999,21 @@ export const getProductsByCategoryForConfig = async (req, res) => {
       select: {
         id: true,
         name: true,
-        showInStore: true
+        showInStore: true,
+        branchId: true
       }
     });
     
     if (!category || !category.showInStore) {
       return res.status(404).json({ error: 'Categoría no encontrada o no visible' });
+    }
+
+    // Seguridad: el usuario solo puede ver productos de categorías de sus sucursales.
+    const allowed = await resolveAllowedBranches(req.userId, req.userRole);
+    if (!allowed.unrestricted) {
+      if (category.branchId == null || !allowed.branchIds.includes(category.branchId)) {
+        return res.status(403).json({ error: 'No tienes acceso a esta categoría' });
+      }
     }
     
     // Obtener productos de la categoría con sus imágenes
