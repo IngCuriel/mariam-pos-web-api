@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { getOrCreateBranch, getAllBranchesForAdmin, updateBranch as updateBranchService, getBranchDeliveryTypesForAdmin, setBranchDeliveryTypes as setBranchDeliveryTypesService } from '../services/branchService.js';
 import { assignEmojiToProduct } from '../services/emojiService.js';
+import { resolveAllowedBranches } from '../utils/userBranches.js';
 const prisma = new PrismaClient();
 
 /** Valores permitidos para productAvailability (modelo de disponibilidad en tienda en línea) */
@@ -814,11 +815,19 @@ export const getAllBranches = async (req, res) => {
   }
 };
 
-// Obtener todas las sucursales para configuración admin (incluye inactivas)
+// Obtener todas las sucursales para configuración admin (incluye inactivas).
+// Seguridad: el ADMIN solo recibe las sucursales asignadas; el SUPER_ADMIN, todas.
 export const getBranchesForConfig = async (req, res) => {
   try {
     const branches = await getAllBranchesForAdmin();
-    res.json(branches);
+    const allowed = await resolveAllowedBranches(req.userId, req.userRole);
+
+    if (allowed.unrestricted) {
+      return res.json(branches);
+    }
+
+    const allowedIds = new Set(allowed.branchIds);
+    res.json(branches.filter((b) => allowedIds.has(b.id)));
   } catch (error) {
     console.error('Error obteniendo sucursales para config:', error);
     res.status(500).json({ error: 'Error obteniendo sucursales' });

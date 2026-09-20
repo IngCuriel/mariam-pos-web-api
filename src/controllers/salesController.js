@@ -200,22 +200,45 @@ export const createSale = async (req, res) => {
 };
 
 export const getSalesById = async (req, res) => {
-  const { id } = req.params;
-  const sale = await prisma.sale.findUnique({
-    where: { id: parseInt(id) },
-    include: {
-       details: true,
-       branch: true
-    },
-  });
-  
-  // Mapear para incluir branch.name como branch para compatibilidad con frontend
-  const saleWithBranch = {
-    ...sale,
-    branch: sale?.branch?.name || null
-  };
-  
-  res.json(saleWithBranch);
+  try {
+    const { id } = req.params;
+    const saleId = parseInt(id, 10);
+    if (Number.isNaN(saleId)) {
+      return res.status(400).json({ error: 'ID de venta inválido' });
+    }
+
+    const sale = await prisma.sale.findUnique({
+      where: { id: saleId },
+      include: {
+        details: true,
+        branch: true,
+      },
+    });
+
+    if (!sale) {
+      return res.status(404).json({ error: 'Venta no encontrada' });
+    }
+
+    // Seguridad: el usuario solo puede ver ventas de sus sucursales permitidas.
+    const allowed = await resolveAllowedBranches(req.userId, req.userRole);
+    if (!allowed.unrestricted) {
+      // Sin sucursales asignadas, o la venta pertenece a otra sucursal → denegar.
+      if (sale.branchId == null || !allowed.branchIds.includes(sale.branchId)) {
+        return res.status(403).json({ error: 'No tienes acceso a esta venta' });
+      }
+    }
+
+    // Mapear para incluir branch.name como branch para compatibilidad con frontend
+    const saleWithBranch = {
+      ...sale,
+      branch: sale.branch?.name || null,
+    };
+
+    res.json(saleWithBranch);
+  } catch (error) {
+    console.error('Error obteniendo venta:', error);
+    res.status(500).json({ error: 'Error obteniendo venta' });
+  }
 };
 
 
