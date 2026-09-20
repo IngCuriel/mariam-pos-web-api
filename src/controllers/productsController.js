@@ -1006,6 +1006,9 @@ export const getProductsByCategoryForConfig = async (req, res) => {
         },
         images: {
           orderBy: { displayOrder: 'asc' }
+        },
+        presentations: {
+          orderBy: [{ isDefault: 'desc' }, { quantity: 'asc' }]
         }
       },
       orderBy: { name: 'asc' }
