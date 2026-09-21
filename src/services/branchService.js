@@ -41,18 +41,21 @@ export async function getOrCreateBranch(branchName) {
 }
 
 /**
- * Obtiene todas las sucursales activas
+ * Obtiene las sucursales visibles en la tienda en línea (activas y con
+ * showInStore = true). Es la lista que consume la tienda; el admin usa
+ * getAllBranchesForAdmin (sin este filtro).
  * @returns {Promise<Array>} - Lista de sucursales
  */
 export async function getAllBranches() {
   return await prisma.branch.findMany({
-    where: { isActive: true },
+    where: { isActive: true, showInStore: true },
     orderBy: { name: 'asc' },
     select: {
       id: true,
       name: true,
       description: true,
       isActive: true,
+      showInStore: true,
       createdAt: true
     }
   });
@@ -71,6 +74,7 @@ export async function getAllBranchesForAdmin() {
       description: true,
       logo: true,
       isActive: true,
+      showInStore: true,
       createdAt: true,
       updatedAt: true
     }

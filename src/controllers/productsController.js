@@ -646,14 +646,16 @@ export const getAllProducts = async (req, res) => {
     // Si se solicita solo categorías visibles (showInStoreOnly), siempre filtrar por showInStore: true
     if (showInStoreOnly === 'true') {
       if (categoryId) {
-        // Si hay categoryId específico, verificar que esa categoría tenga showInStore: true
+        // Si hay categoryId específico, verificar que esa categoría esté visible
+        // y que pertenezca a una sucursal visible en la tienda.
         const category = await prisma.category.findUnique({
           where: { id: categoryId },
-          select: { id: true, showInStore: true }
+          select: { id: true, showInStore: true, branch: { select: { showInStore: true } } }
         });
-        
-        if (!category || !category.showInStore) {
-          // Si la categoría no existe o no está visible, retornar respuesta vacía
+
+        if (!category || !category.showInStore || !category.branch?.showInStore) {
+          // Si la categoría no existe, no está visible, o su sucursal no está
+          // visible, retornar respuesta vacía
           return res.json({
             products: [],
             total: 0,
@@ -666,9 +668,10 @@ export const getAllProducts = async (req, res) => {
         // Si la categoría es visible, usar el categoryId normalmente
         where.categoryId = categoryId;
       } else {
-        // Si no hay categoryId específico, obtener IDs de todas las categorías visibles
+        // Si no hay categoryId específico, obtener IDs de todas las categorías
+        // visibles cuya sucursal también esté visible en la tienda.
         const visibleCategories = await prisma.category.findMany({
-          where: { showInStore: true },
+          where: { showInStore: true, branch: { is: { showInStore: true } } },
           select: { id: true }
         });
         
@@ -690,6 +693,9 @@ export const getAllProducts = async (req, res) => {
       
       // También filtrar por productos con showInStore: true
       where.showInStore = true;
+
+      // La sucursal del producto también debe estar visible en la tienda.
+      where.branch = { is: { showInStore: true } };
     } else if (categoryId) {
       // Si no se solicita showInStoreOnly pero hay categoryId, usar normalmente (para admin u otros casos)
       where.categoryId = categoryId;
@@ -768,10 +774,13 @@ export const getAllProducts = async (req, res) => {
 // Obtener todas las categorías de todas las sucursales
 export const getAllCategories = async (req, res) => {
   try {
-    // Si se solicita solo para la tienda, filtrar por showInStore
+    // Si se solicita solo para la tienda, filtrar por categorías visibles cuya
+    // sucursal también esté visible en la tienda.
     const showInStoreOnly = req.query.showInStore === 'true';
-    
-    const whereClause = showInStoreOnly ? { showInStore: true } : {};
+
+    const whereClause = showInStoreOnly
+      ? { showInStore: true, branch: { is: { showInStore: true } } }
+      : {};
     
     // Obtener TODAS las categorías que cumplan el filtro (sin distinct)
     // Esto permite mostrar todas las categorías, incluso si tienen el mismo nombre pero diferente sucursal
@@ -838,15 +847,16 @@ export const getBranchesForConfig = async (req, res) => {
 export const updateBranch = async (req, res) => {
   try {
     const { id } = req.params;
-    const { isActive, description, logo } = req.body;
+    const { isActive, showInStore, description, logo } = req.body;
 
     const data = {};
     if (typeof isActive === 'boolean') data.isActive = isActive;
+    if (typeof showInStore === 'boolean') data.showInStore = showInStore;
     if (description !== undefined) data.description = description === '' ? null : description;
     if (logo !== undefined) data.logo = logo === '' ? null : logo;
 
     if (Object.keys(data).length === 0) {
-      return res.status(400).json({ error: 'Envía al menos un campo: isActive, description o logo' });
+      return res.status(400).json({ error: 'Envía al menos un campo: isActive, showInStore, description o logo' });
     }
 
     const branch = await updateBranchService(id, data);
