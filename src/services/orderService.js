@@ -255,6 +255,10 @@ export async function confirmByCustomer(orderId, userId, options = {}) {
     : null;
   const isDelivery = deliveryTypeForCode?.code === 'delivery';
   let deliveryAddress = null;
+  // Snapshot de la ubicación del cliente: se congela en el pedido al confirmar,
+  // así el histórico no cambia aunque el cliente edite/borre su dirección luego.
+  let deliveryLatitude = null;
+  let deliveryLongitude = null;
   if (isDelivery) {
     if (addressId != null) {
       const userAddress = await prisma.userAddress.findFirst({
@@ -266,6 +270,10 @@ export async function confirmByCustomer(orderId, userId, options = {}) {
         throw err;
       }
       deliveryAddress = formatUserAddress(userAddress);
+      if (userAddress.latitude != null && userAddress.longitude != null) {
+        deliveryLatitude = userAddress.latitude;
+        deliveryLongitude = userAddress.longitude;
+      }
     } else if (typeof deliveryAddressRaw === 'string' && deliveryAddressRaw.trim()) {
       deliveryAddress = deliveryAddressRaw.trim();
     }
@@ -284,6 +292,10 @@ export async function confirmByCustomer(orderId, userId, options = {}) {
   };
   if (deliveryAddress) {
     updateData.deliveryAddress = deliveryAddress;
+  }
+  if (deliveryLatitude != null && deliveryLongitude != null) {
+    updateData.deliveryLatitude = deliveryLatitude;
+    updateData.deliveryLongitude = deliveryLongitude;
   }
 
   const updatedOrder = await prisma.order.update({
