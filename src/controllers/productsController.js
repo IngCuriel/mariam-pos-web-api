@@ -56,7 +56,15 @@ export const createProductsBulk = async (req, res) => {
           category,
           presentations = [],
           inventory,
-          kitItems = []
+          kitItems = [],
+          // Campos nuevos sincronizados desde el POS local:
+          pricingMode,
+          isPromo,
+          promoPrice,
+          promoEndsAt,
+          unitName,
+          unitAbbreviation,
+          priceTiers = []
         } = productData;
         const finalProductAvailability = normalizeProductAvailability(productAvailability);
 
@@ -164,6 +172,12 @@ export const createProductsBulk = async (req, res) => {
               categoryId: finalCategoryId,
               trackInventory: trackInventory || false,
               isKit: isKit || false,
+              pricingMode: pricingMode || "simple",
+              isPromo: isPromo || false,
+              promoPrice: promoPrice ?? null,
+              promoEndsAt: promoEndsAt ? new Date(promoEndsAt) : null,
+              unitName: unitName ?? null,
+              unitAbbreviation: unitAbbreviation ?? null,
               branchId: branchId,
             }
           });
@@ -187,6 +201,12 @@ export const createProductsBulk = async (req, res) => {
                 categoryId: finalCategoryId,
                 trackInventory: trackInventory || false,
                 isKit: isKit || false,
+                pricingMode: pricingMode || "simple",
+                isPromo: isPromo || false,
+                promoPrice: promoPrice ?? null,
+                promoEndsAt: promoEndsAt ? new Date(promoEndsAt) : null,
+                unitName: unitName ?? null,
+                unitAbbreviation: unitAbbreviation ?? null,
                 branchId: branchId,
                 createdAt: createdAt ? new Date(createdAt) : new Date()
               }
@@ -304,6 +324,24 @@ export const createProductsBulk = async (req, res) => {
               trackInventory: inventory.trackInventory || false,
               branchId: invBranchObj.id
             }
+          });
+        }
+
+        // 4.5. Manejar tramos de precio escalonado (tiered / mayoreo).
+        // Estrategia simple y robusta: se reemplazan por completo (borrar + recrear)
+        // para que el estado online refleje exactamente los tramos locales. Solo
+        // aplica cuando el producto usa pricingMode "tiered"; si no, se limpian.
+        await tx.productPriceTier.deleteMany({
+          where: { productId: product.id }
+        });
+        if ((pricingMode || "simple") === "tiered" && Array.isArray(priceTiers) && priceTiers.length > 0) {
+          await tx.productPriceTier.createMany({
+            data: priceTiers.map((tier) => ({
+              productId: product.id,
+              minQty: tier.minQty,
+              maxQty: tier.maxQty ?? null,
+              unitPrice: tier.unitPrice
+            }))
           });
         }
 

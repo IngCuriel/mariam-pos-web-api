@@ -111,6 +111,20 @@ model Product {
   trackInventory      Boolean? @default(false)
   isKit               Boolean  @default(false)
   showInStore         Boolean  @default(true) // Mostrar en tienda en línea (por defecto visible)
+
+  // Modo de precio: "simple" (default) o "tiered" (precio escalonado por cantidad).
+  pricingMode String @default("simple")
+
+  // Promoción: precio promocional fijo (menor al precio real) con fecha fin opcional.
+  isPromo     Boolean   @default(false)
+  promoPrice  Float? // precio promocional (debe ser < price)
+  promoEndsAt DateTime? // opcional: hasta cuándo aplica (null = sin vencimiento)
+
+  // Unidad de medida (informativa) sincronizada como TEXTO PLANO desde el POS
+  // (no como relación, para no depender de ids entre instalaciones).
+  unitName         String? // Ej: "Kilogramo", "Litro", "Pieza"
+  unitAbbreviation String? // Ej: "kg", "L", "pza"
+
   branchId            Int?
   branch              Branch?  @relation(fields: [branchId], references: [id])
   createdAt           DateTime @default(now())
@@ -124,6 +138,7 @@ model Product {
   kitItems      KitItem[]             @relation("Kit")
   kitsAsItem    KitItem[]             @relation("KitProduct")
   images        ProductImage[]
+  priceTiers    ProductPriceTier[]
 
   @@index([code])
   @@index([name])
@@ -131,6 +146,25 @@ model Product {
   @@index([categoryId])
   @@index([showInStore])
   @@index([productAvailability])
+}
+
+// ------------------------------------------------------------
+// Tramos de precio por cantidad (precio escalonado / tiered) para mayoreo.
+// Ej: 1-10 => $5, 11-20 => $4, 21+ => $3. Sincronizado desde el POS local.
+// ------------------------------------------------------------
+model ProductPriceTier {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  minQty    Int // cantidad mínima del tramo (inclusive)
+  maxQty    Int? // cantidad máxima del tramo (inclusive); null = "en adelante"
+  unitPrice Float // precio por unidad en este tramo
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([productId])
 }
 
 model ProductImage {
