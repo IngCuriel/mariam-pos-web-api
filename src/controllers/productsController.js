@@ -532,7 +532,10 @@ export const getProductById = async (req, res) => {
             presentation: true
           }
         }
-      })
+      }),
+      // Tramos de precio escalonado (mayoreo): ordenados por cantidad mínima
+      // para mostrarlos de menor a mayor en el detalle del producto.
+      priceTiers: { orderBy: { minQty: 'asc' } }
     };
 
     const product = await prisma.product.findUnique({
