@@ -198,10 +198,7 @@ model ProductPresentation {
   @@index([productId])
   @@index([branchId])
 
-  @@unique(
-  [name, branchId, productId],
-    name: "name_branchId_productId"
-  )
+  @@unique([name, branchId, productId], name: "name_branchId_productId")
 }
 
 model Inventory {
