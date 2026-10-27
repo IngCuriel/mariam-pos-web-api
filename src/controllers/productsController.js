@@ -272,6 +272,12 @@ export const createProductsBulk = async (req, res) => {
             const presBranchObj = await getOrCreateBranch(presBranchName);
               // Crear si no existe o actualizar si ya existe.
               // No dependemos de pres.id.
+              console.log('DEBUG presentación:', {
+                localId: pres.id,
+                name: pres.name,
+                productId: product.id,
+                branchId: presBranchObj.id,
+              });
               const presentation = await tx.productPresentation.upsert({
                 where: {
                   name_branchId_productId: {
@@ -286,7 +292,7 @@ export const createProductsBulk = async (req, res) => {
                   unitPrice: pres.unitPrice,
                   isDefault: pres.isDefault ?? false,
                 },
-
+                
                 create: {
                   name: pres.name,
                   quantity: pres.quantity,
