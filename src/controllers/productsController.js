@@ -66,6 +66,11 @@ export const createProductsBulk = async (req, res) => {
           unitAbbreviation,
           priceTiers = []
         } = productData;
+
+        console.log('Producto code', code );
+        for(const presentacion of presentations) {
+           console.log('Presentacion', JSON.stringify(presentacion));
+        }
         const finalProductAvailability = normalizeProductAvailability(productAvailability);
 
         // 0. Obtener o crear sucursal PRIMERO (antes de usarla)
