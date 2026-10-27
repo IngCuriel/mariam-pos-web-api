@@ -48,6 +48,57 @@ export function mapOrderForGetByIdResponse(order, viewerEmail) {
   };
 }
 
+/**
+ * Adjunta el `code` (SKU) del producto a cada ítem de los pedidos indicados.
+ *
+ * `OrderItem` guarda `productId` y `productName` como snapshot, pero NO tiene
+ * relación Prisma con `Product`, por lo que el `code` no viaja en el `include`.
+ * El POS local necesita el `code` para resolver el producto local correcto al
+ * cobrar un pedido (el `productId` es el id de la tienda y no coincide con el id
+ * local). Este helper resuelve el `code` con una sola consulta a `Product`
+ * (`{id, code}`) y lo inyecta en cada ítem como campo `code`.
+ *
+ * Es tolerante: si un producto fue borrado o no tiene `code`, el ítem queda con
+ * `code: null` (el POS cae a su producto genérico en ese caso).
+ *
+ * @param {Array<object>} orders - Pedidos con `items` ya incluidos. Se mutan in situ.
+ * @returns {Promise<Array<object>>} Los mismos pedidos, con `code` en cada ítem.
+ */
+export async function attachProductCodesToOrders(orders) {
+  if (!Array.isArray(orders) || orders.length === 0) return orders;
+
+  // Reunir todos los productId presentes en los ítems (sin duplicados ni nulos).
+  const productIds = new Set();
+  for (const order of orders) {
+    for (const item of order?.items ?? []) {
+      if (item?.productId != null) productIds.add(item.productId);
+    }
+  }
+  if (productIds.size === 0) return orders;
+
+  const products = await prisma.product.findMany({
+    where: { id: { in: [...productIds] } },
+    select: { id: true, code: true },
+  });
+  const codeById = new Map(products.map((p) => [p.id, p.code ?? null]));
+
+  for (const order of orders) {
+    if (!Array.isArray(order?.items)) continue;
+    order.items = order.items.map((item) => ({
+      ...item,
+      code: item?.productId != null ? codeById.get(item.productId) ?? null : null,
+    }));
+  }
+  return orders;
+}
+
+/** Variante para un solo pedido: reutiliza {@link attachProductCodesToOrders}. */
+export async function attachProductCodesToOrder(order) {
+  if (!order) return order;
+  const [result] = await attachProductCodesToOrders([order]);
+  return result;
+}
+
 /** Registra un cambio de estado en el historial del pedido (para timeline tipo Mercado Libre). */
 export async function recordStatusHistory(orderId, status) {
   await prisma.orderStatusHistory.create({

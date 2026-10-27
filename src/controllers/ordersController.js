@@ -328,6 +328,10 @@ export const getOrders = async (req, res) => {
       prisma.order.count({ where })
     ]);
 
+    // Adjunta el `code` (SKU) del producto a cada ítem para que el POS pueda
+    // resolver el producto local al cobrar el pedido (el productId es de la tienda).
+    await orderService.attachProductCodesToOrders(orders);
+
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
     res.json({
@@ -393,6 +397,8 @@ export const getOrderById = async (req, res) => {
     }
 
     const responseOrder = orderService.mapOrderForGetByIdResponse(order, req.user?.email);
+    // Adjunta el `code` (SKU) del producto a cada ítem (ver getOrders).
+    await orderService.attachProductCodesToOrder(responseOrder);
     res.json(responseOrder);
   } catch (error) {
     console.error('Error obteniendo pedido:', error);
