@@ -264,6 +264,8 @@ export const createProductsBulk = async (req, res) => {
             }
           });*/
 
+          // 1. Creamos un arreglo para guardar los IDs de las presentaciones válidas actuales
+         const activePresentationIds = [];
           // Crear o actualizar presentaciones
           for (const pres of presentations) {
             console.log('Entro a Crear o actualizar presentaciones,', JSON.stringify(pres))
@@ -292,7 +294,7 @@ export const createProductsBulk = async (req, res) => {
                   unitPrice: pres.unitPrice,
                   isDefault: pres.isDefault ?? false,
                 },
-                
+
                 create: {
                   name: pres.name,
                   quantity: pres.quantity,
@@ -309,6 +311,20 @@ export const createProductsBulk = async (req, res) => {
                 presentation.productId,
                 presentation.branchId
               );
+              // 2. Guardamos el ID de la presentación procesada (ya sea nueva o actualizada)
+              activePresentationIds.push(presentation.id);
+          }
+           // 3. Al salir del ciclo, eliminamos los registros viejos de este producto que quedaron huérfanos
+          if (activePresentationIds.length > 0) {
+              const deleteResult = await tx.productPresentation.deleteMany({
+                where: {
+                  productId: product.id,
+                  id: {
+                    notIn: activePresentationIds, // Elimina los que NO están en la lista actual
+                  },
+                },
+              });
+              console.log(`Presentaciones viejas eliminadas huerfanas: ${deleteResult.count}`);
           }
         }
 
