@@ -247,16 +247,17 @@ export const createProductsBulk = async (req, res) => {
         // 4. Manejar presentaciones
         if (!isKit && presentations.length > 0) {
           // Eliminar presentaciones existentes que no vienen en el request
-          const existingPresentationIds = presentations
+          // /* se comento para  pruebas*/
+          /*const existingPresentationIds = presentations
             .filter(p => p.id)
             .map(p => p.id);
           
           await tx.productPresentation.deleteMany({
             where: {
               productId: product.id,
-              id: { notIn: existingPresentationIds }
+              i7d: { notIn: existingPresentationIds }
             }
-          });
+          });*/
 
           // Crear o actualizar presentaciones
           for (const pres of presentations) {
