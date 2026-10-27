@@ -769,7 +769,10 @@ export const getAllProducts = async (req, res) => {
         orderBy: { displayOrder: 'asc' }
       },
       ...(includePresentations === 'true' && { presentations: true }),
-      ...(includeInventory === 'true' && { inventory: true })
+      ...(includeInventory === 'true' && { inventory: true }),
+      // Siempre incluir tramos de precio escalonado para que el card pueda
+      // mostrar el badge de mayoreo sin una petición extra por producto.
+      priceTiers: { orderBy: { minQty: 'asc' } }
     };
 
     // Obtener total de productos (para paginación)
