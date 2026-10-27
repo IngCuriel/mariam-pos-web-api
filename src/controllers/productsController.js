@@ -266,44 +266,43 @@ export const createProductsBulk = async (req, res) => {
 
           // Crear o actualizar presentaciones
           for (const pres of presentations) {
+            console.log('Entro a Crear o actualizar presentaciones,', JSON.stringify(pres))
             // Obtener sucursal de la presentación o usar la del producto
             const presBranchName = pres.branch || branch || "Sucursal Default";
             const presBranchObj = await getOrCreateBranch(presBranchName);
-            
-            if (pres.id) {
-              // Actualizar presentación existente
-              await tx.productPresentation.upsert({
-                where: { id: pres.id },
-                update: {
-                  name: pres.name,
-                  quantity: pres.quantity,
-                  unitPrice: pres.unitPrice,
-                  isDefault: pres.isDefault || false,
-                  branchId: presBranchObj.id
+              // Crear si no existe o actualizar si ya existe.
+              // No dependemos de pres.id.
+              const presentation = await tx.productPresentation.upsert({
+                where: {
+                  name_branchId_productId: {
+                    name: pres.name,
+                    branchId: presBranchObj.id,
+                    productId: product.id,
+                  },
                 },
+
+                update: {
+                  quantity: pres.quantity,
+                  unitPrice: pres.unitPrice,
+                  isDefault: pres.isDefault ?? false,
+                },
+
                 create: {
-                  id: pres.id,
                   name: pres.name,
                   quantity: pres.quantity,
                   unitPrice: pres.unitPrice,
-                  isDefault: pres.isDefault || false,
+                  isDefault: pres.isDefault ?? false,
                   productId: product.id,
-                  branchId: presBranchObj.id
-                }
+                  branchId: presBranchObj.id,
+                },
               });
-            } else {
-              // Crear nueva presentación
-              await tx.productPresentation.create({
-                data: {
-                  name: pres.name,
-                  quantity: pres.quantity,
-                  unitPrice: pres.unitPrice,
-                  isDefault: pres.isDefault || false,
-                  productId: product.id,
-                  branchId: presBranchObj.id
-                }
-              });
-            }
+              console.log(
+                'Presentación sincronizada:',
+                presentation.id,
+                presentation.name,
+                presentation.productId,
+                presentation.branchId
+              );
           }
         }
 
