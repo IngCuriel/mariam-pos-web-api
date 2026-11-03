@@ -106,12 +106,41 @@ export async function recordStatusHistory(orderId, status) {
   });
 }
 
+/** Margen para no rechazar una fecha "ahora" por diferencias de reloj entre terminal y servidor. */
+const ESTIMATED_AVAILABLE_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+/**
+ * Normaliza la fecha estimada de disponibilidad ("sobre pedido").
+ * - undefined / null / '' => null (sin fecha estimada).
+ * - Fecha inválida o en el pasado => error 400.
+ */
+export function parseEstimatedAvailableAt(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const err = new Error('La fecha estimada de disponibilidad no es válida');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (date.getTime() < Date.now() - ESTIMATED_AVAILABLE_CLOCK_SKEW_MS) {
+    const err = new Error('La fecha estimada de disponibilidad no puede ser en el pasado');
+    err.statusCode = 400;
+    throw err;
+  }
+  return date;
+}
+
 /**
  * Admin confirma disponibilidad: ajusta cantidades, recalcula total,
  * pasa a PARTIALLY_AVAILABLE o AVAILABLE y notifica al cliente.
  * Solo válido si estado actual es UNDER_REVIEW.
+ *
+ * options.estimatedAvailableAt (opcional): fecha/hora estimada en que el pedido
+ * completo estará disponible (pedidos "sobre pedido"). Se ignora si el pedido
+ * queda cancelado por no haber productos disponibles.
  */
-export async function reviewAvailability(orderId, itemsPayload) {
+export async function reviewAvailability(orderId, itemsPayload, options = {}) {
+  const estimatedAvailableAt = parseEstimatedAvailableAt(options.estimatedAvailableAt);
   const id = parseInt(orderId);
   const order = await prisma.order.findUnique({
     where: { id },
@@ -196,7 +225,13 @@ export async function reviewAvailability(orderId, itemsPayload) {
 
     await tx.order.update({
       where: { id },
-      data: { total: newTotal, status: newStatus, cancellationReason },
+      data: {
+        total: newTotal,
+        status: newStatus,
+        cancellationReason,
+        // Sin productos disponibles el pedido se cancela: no aplica fecha estimada.
+        estimatedAvailableAt: newStatus === OrderStatus.CANCELLED ? null : estimatedAvailableAt,
+      },
     });
   });
 

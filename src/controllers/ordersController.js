@@ -571,7 +571,7 @@ export const updateOrderItemsAvailability = async (req, res) => {
 export const confirmOrderAvailability = async (req, res) => {
   try {
     const { id } = req.params;
-    const { items } = req.body;
+    const { items, estimatedAvailableAt } = req.body;
 
     // El admin solo puede operar sobre pedidos de sus sucursales.
     const target = await prisma.order.findUnique({
@@ -585,7 +585,8 @@ export const confirmOrderAvailability = async (req, res) => {
       return res.status(403).json({ error: 'No tienes acceso a este pedido' });
     }
 
-    const order = await orderService.reviewAvailability(id, items);
+    // estimatedAvailableAt (opcional): pedido "sobre pedido" con fecha/hora estimada de disponibilidad.
+    const order = await orderService.reviewAvailability(id, items, { estimatedAvailableAt });
     res.json({
       message: 'Disponibilidad confirmada. El cliente ha sido notificado.',
       order

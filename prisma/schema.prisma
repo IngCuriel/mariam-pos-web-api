@@ -392,6 +392,7 @@ model Order {
   readyAt            DateTime? // Cuando admin marca "listo para recoger" o "en camino"
   deliveredAt        DateTime? // Cuando admin marca "entregado"
   cancellationReason String? // Motivo de cancelación (por tienda o por cliente)
+  estimatedAvailableAt DateTime? // Pedido "sobre pedido": fecha/hora estimada en que estará disponible (la fija el cajero al confirmar disponibilidad)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
