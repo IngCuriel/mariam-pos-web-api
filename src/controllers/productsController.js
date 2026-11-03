@@ -695,6 +695,7 @@ export const getAllProducts = async (req, res) => {
       branch,
       branchId,
       showInStoreOnly = 'false',
+      searchByCode = 'false',
       limit = 30,
       offset = 0,
       sortBy
@@ -706,7 +707,10 @@ export const getAllProducts = async (req, res) => {
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } }
+        { description: { contains: search, mode: 'insensitive' } },
+        // Código (SKU) solo si se pide explícitamente: lo usa el POS para sugerir
+        // alternativas en pedidos. El catálogo del cliente no cambia.
+        ...(searchByCode === 'true' ? [{ code: { contains: search, mode: 'insensitive' } }] : []),
       ];
     }
     

@@ -418,6 +418,7 @@ model OrderItem {
   isAvailable          Boolean? // null = no revisado, true = disponible, false = no disponible
   presentationName     String? // Nombre de la presentación elegida (ej. "Caja 6 pz")
   presentationQuantity Int? // Piezas de esa presentación (ej. 6)
+  suggestedProductIds  Int[]    @default([]) // Productos sugeridos por el cajero cuando el ítem no está disponible (máx. 3)
   createdAt            DateTime @default(now())
 
   @@index([orderId])

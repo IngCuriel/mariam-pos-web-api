@@ -82,11 +82,60 @@ export async function attachProductCodesToOrders(orders) {
   });
   const codeById = new Map(products.map((p) => [p.id, p.code ?? null]));
 
+  // Alternativas sugeridas: una sola consulta para todos los ítems. Solo se
+  // devuelven las que siguen a la venta en la tienda en línea.
+  const suggestedIds = new Set();
+  for (const order of orders) {
+    for (const item of order?.items ?? []) {
+      for (const sid of item?.suggestedProductIds ?? []) suggestedIds.add(sid);
+    }
+  }
+  const suggestedById = new Map();
+  if (suggestedIds.size > 0) {
+    const suggested = await prisma.product.findMany({
+      where: { id: { in: [...suggestedIds] } },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        price: true,
+        isPromo: true,
+        promoPrice: true,
+        promoEndsAt: true,
+        icon: true,
+        unitAbbreviation: true,
+        showInStore: true,
+        productAvailability: true,
+        images: { orderBy: { displayOrder: 'asc' }, take: 1, select: { url: true } },
+        _count: { select: { presentations: true, priceTiers: true } },
+      },
+    });
+    for (const p of suggested) {
+      if (!isSuggestableProduct(p)) continue;
+      suggestedById.set(p.id, {
+        id: p.id,
+        code: p.code ?? null,
+        name: p.name,
+        price: p.price,
+        isPromo: p.isPromo,
+        promoPrice: p.promoPrice,
+        promoEndsAt: p.promoEndsAt,
+        unitAbbreviation: p.unitAbbreviation ?? null,
+        imageUrl: p.images?.[0]?.url ?? p.icon ?? null,
+        // Con presentaciones o mayoreo el cliente debe elegir en el detalle del producto.
+        hasOptions: (p._count?.presentations ?? 0) > 0 || (p._count?.priceTiers ?? 0) > 0,
+      });
+    }
+  }
+
   for (const order of orders) {
     if (!Array.isArray(order?.items)) continue;
     order.items = order.items.map((item) => ({
       ...item,
       code: item?.productId != null ? codeById.get(item.productId) ?? null : null,
+      suggestedProducts: (item?.suggestedProductIds ?? [])
+        .map((sid) => suggestedById.get(sid))
+        .filter(Boolean),
     }));
   }
   return orders;
@@ -104,6 +153,43 @@ export async function recordStatusHistory(orderId, status) {
   await prisma.orderStatusHistory.create({
     data: { orderId: parseInt(orderId), status },
   });
+}
+
+/** Máximo de productos sugeridos (alternativas) por ítem no disponible. */
+export const MAX_SUGGESTED_PRODUCTS = 3;
+
+/** Un producto se puede sugerir solo si se vende en la tienda en línea. */
+const isSuggestableProduct = (p) =>
+  p != null && p.showInStore !== false && p.productAvailability !== 'in_store_only';
+
+/**
+ * Normaliza los ids sugeridos de un ítem: enteros positivos, sin duplicados,
+ * sin el propio producto del ítem y como máximo MAX_SUGGESTED_PRODUCTS.
+ * Lanza 400 si el formato es inválido o excede el máximo.
+ */
+export function normalizeSuggestedProductIds(value, ownProductId) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    const err = new Error('suggestedProductIds debe ser un arreglo de ids de producto');
+    err.statusCode = 400;
+    throw err;
+  }
+  const ids = [];
+  for (const raw of value) {
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n <= 0) {
+      const err = new Error('suggestedProductIds contiene un id de producto inválido');
+      err.statusCode = 400;
+      throw err;
+    }
+    if (n !== ownProductId && !ids.includes(n)) ids.push(n);
+  }
+  if (ids.length > MAX_SUGGESTED_PRODUCTS) {
+    const err = new Error(`Solo se pueden sugerir hasta ${MAX_SUGGESTED_PRODUCTS} productos por artículo`);
+    err.statusCode = 400;
+    throw err;
+  }
+  return ids;
 }
 
 /** Margen para no rechazar una fecha "ahora" por diferencias de reloj entre terminal y servidor. */
@@ -175,6 +261,33 @@ export async function reviewAvailability(orderId, itemsPayload, options = {}) {
     throw err;
   }
 
+  // Sugerencias (alternativas de la tienda en línea) solo para ítems NO disponibles.
+  // Se validan antes de escribir: existen, se venden en línea y son de la sucursal del pedido.
+  const suggestionsByItemId = new Map();
+  for (const it of itemsPayload) {
+    const line = order.items.find((i) => i.id === it.itemId);
+    if (!line) continue;
+    const ids = it.isAvailable === true ? [] : normalizeSuggestedProductIds(it.suggestedProductIds, line.productId);
+    suggestionsByItemId.set(it.itemId, ids);
+  }
+  const allSuggestedIds = [...new Set([...suggestionsByItemId.values()].flat())];
+  if (allSuggestedIds.length > 0) {
+    const suggested = await prisma.product.findMany({
+      where: { id: { in: allSuggestedIds } },
+      select: { id: true, branchId: true, showInStore: true, productAvailability: true },
+    });
+    const byId = new Map(suggested.map((p) => [p.id, p]));
+    for (const sid of allSuggestedIds) {
+      const p = byId.get(sid);
+      const sameBranch = order.branchId == null || p?.branchId == null || p.branchId === order.branchId;
+      if (!isSuggestableProduct(p) || !sameBranch) {
+        const err = new Error('Uno de los productos sugeridos no está disponible en la tienda en línea de esta sucursal');
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+  }
+
   const previousStatus = order.status;
 
   await prisma.$transaction(async (tx) => {
@@ -199,6 +312,8 @@ export async function reviewAvailability(orderId, itemsPayload, options = {}) {
           isAvailable: available ? true : false,
           confirmedQuantity: qty,
           subtotal,
+          // Alternativas sugeridas (vacío cuando el ítem sí está disponible).
+          suggestedProductIds: available ? [] : suggestionsByItemId.get(itemId) ?? [],
         },
       });
     }
